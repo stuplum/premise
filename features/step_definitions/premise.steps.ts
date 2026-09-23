@@ -1,0 +1,1285 @@
+import assert from "node:assert/strict";
+import {
+  access,
+  mkdtemp,
+  mkdir,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { spawnSync, type SpawnSyncReturns } from "node:child_process";
+import {
+  After,
+  Given,
+  Then,
+  When,
+  setWorldConstructor,
+  type IWorldOptions,
+} from "@cucumber/cucumber";
+
+const cliPath = resolve("dist/cli.js");
+const originalRequirement = "Feature: Take a payment\n";
+const changedRequirement = "Feature: Take independent payments\n";
+
+type PremiseConfiguration = {
+  cucumber?: { features: string[]; steps: string[] };
+  version: 1;
+};
+
+class PremiseWorld {
+  projectDirectory = "";
+  result?: SpawnSyncReturns<string>;
+
+  constructor(_options: IWorldOptions) {}
+}
+
+setWorldConstructor(PremiseWorld);
+
+Given("an empty project", async function (this: PremiseWorld) {
+  this.projectDirectory = await mkdtemp(join(tmpdir(), "premise-acceptance-"));
+});
+
+Given(
+  "a project with legacy manual relationship configuration",
+  async function (this: PremiseWorld) {
+    this.projectDirectory = await mkdtemp(join(tmpdir(), "premise-acceptance-"));
+    await writeJson(join(this.projectDirectory, "premise.json"), {
+      requirements: {
+        "PAY-001": {
+          affects: ["src/payment.ts"],
+          source: "features/PAY-001.feature",
+        },
+      },
+      version: 1,
+    });
+  },
+);
+
+Given(
+  "requirement {string} has changed",
+  async function (this: PremiseWorld, requirementId: string) {
+    const path = `features/${requirementId}.feature`;
+    const existing = await readFile(join(this.projectDirectory, path), "utf8");
+    await writeProjectFile({
+      content: existing.replace(originalRequirement.trim(), changedRequirement.trim()),
+      projectDirectory: this.projectDirectory,
+      relativePath: path,
+    });
+  },
+);
+
+Given(
+  "requirement {string} exists",
+  async function (this: PremiseWorld, requirementId: string) {
+    await writeProjectFile({
+      content: [
+        `@${requirementId}`,
+        "Feature: Take a payment",
+        "  Scenario: Accept a valid payment",
+        "    When the customer pays",
+        "    Then the payment is accepted",
+        "",
+      ].join("\n"),
+      projectDirectory: this.projectDirectory,
+      relativePath: `features/${requirementId}.feature`,
+    });
+  },
+);
+
+Given(
+  "decision {string} is driven by requirement {string}",
+  async function (
+    this: PremiseWorld,
+    decisionId: string,
+    requirementId: string,
+  ) {
+    await writeProjectFile({
+      content: [
+        `Decision ${decisionId} "Reliable confirmation delivery"`,
+        `Driven by requirement ${requirementId}`,
+        "Choose durable storage of pending confirmations",
+        "Because accepted orders must survive delivery outages",
+        "Accept possible duplicate delivery",
+        "",
+      ].join("\n"),
+      projectDirectory: this.projectDirectory,
+      relativePath: `decisions/${decisionId}.decision`,
+    });
+  },
+);
+
+Given(
+  "decision {string} is driven by source {string}",
+  async function (this: PremiseWorld, decisionId: string, source: string) {
+    await writeDecision({
+      decisionId,
+      driver: `source ${source}`,
+      projectDirectory: this.projectDirectory,
+    });
+  },
+);
+
+Given(
+  "decision {string} supersedes {string} for requirement {string}",
+  async function (
+    this: PremiseWorld,
+    decisionId: string,
+    supersededDecisionId: string,
+    requirementId: string,
+  ) {
+    await writeDecision({
+      decisionId,
+      driver: `requirement ${requirementId}`,
+      projectDirectory: this.projectDirectory,
+      supersededDecisionId,
+    });
+  },
+);
+
+Given(
+  "source {string} exists",
+  async function (this: PremiseWorld, source: string) {
+    await writeProjectFile({
+      content: "Orders must be accepted when confirmation delivery is unavailable.\n",
+      projectDirectory: this.projectDirectory,
+      relativePath: source,
+    });
+  },
+);
+
+Given(
+  "decision {string} has been reviewed",
+  function (this: PremiseWorld, decisionId: string) {
+    this.result = runPremise({
+      arguments: ["review", decisionId],
+      projectDirectory: this.projectDirectory,
+    });
+    assert.equal(commandResult(this).status, 0, commandOutput(this));
+  },
+);
+
+Given(
+  "source {string} has changed",
+  async function (this: PremiseWorld, source: string) {
+    const path = join(this.projectDirectory, source);
+    const existing = await readFile(path, "utf8");
+    await writeFile(path, `${existing.trim()}\nThe confirmation must survive a restart.\n`);
+  },
+);
+
+Given("the project knowledge is committed", function (this: PremiseWorld) {
+  runGit({ arguments: ["init", "--quiet"], projectDirectory: this.projectDirectory });
+  runGit({ arguments: ["add", "."], projectDirectory: this.projectDirectory });
+  runGit({
+    arguments: [
+      "-c",
+      "user.name=Premise acceptance",
+      "-c",
+      "user.email=premise@example.invalid",
+      "commit",
+      "--quiet",
+      "-m",
+      "Baseline knowledge",
+    ],
+    projectDirectory: this.projectDirectory,
+  });
+});
+
+Given(
+  "the source for requirement {string} has been deleted",
+  async function (this: PremiseWorld, requirementId: string) {
+    await rm(join(this.projectDirectory, `features/${requirementId}.feature`));
+  },
+);
+
+When("I run {string}", function (this: PremiseWorld, command: string) {
+  const [, ...arguments_] = splitCommand(command);
+  this.result = runPremise({
+    arguments: arguments_,
+    projectDirectory: this.projectDirectory,
+  });
+});
+
+When(
+  "I run premise context with the absolute path to {string}",
+  function (this: PremiseWorld, artifactPath: string) {
+    this.result = spawnSync(
+      process.execPath,
+      [cliPath, "context", resolve(this.projectDirectory, artifactPath)],
+      {
+        cwd: this.projectDirectory,
+        encoding: "utf8",
+      },
+    );
+  },
+);
+
+When(
+  "I run premise context with an absolute path outside the project",
+  function (this: PremiseWorld) {
+    this.result = spawnSync(
+      process.execPath,
+      [cliPath, "context", resolve(this.projectDirectory, "../outside.ts")],
+      {
+        cwd: this.projectDirectory,
+        encoding: "utf8",
+      },
+    );
+  },
+);
+
+Then("the command succeeds", function (this: PremiseWorld) {
+  assert.equal(commandResult(this).status, 0, commandOutput(this));
+});
+
+Then("the command fails", function (this: PremiseWorld) {
+  assert.notEqual(commandResult(this).status, 0);
+});
+
+Then("the command produces no output", function (this: PremiseWorld) {
+  assert.equal(commandOutput(this), "");
+});
+
+Then(
+  "the command reports that {string} changed",
+  function (this: PremiseWorld, requirementId: string) {
+    assert.match(commandOutput(this), new RegExp(`${requirementId} changed`));
+  },
+);
+
+Then(
+  "the command reports {string} for reconsideration",
+  function (this: PremiseWorld, affectedPath: string) {
+    assert.match(commandOutput(this), new RegExp(`Reconsider:.*${escapeRegex(affectedPath)}`, "s"));
+  },
+);
+
+Then(
+  "the command reports decision {string} for reconsideration",
+  function (this: PremiseWorld, decisionId: string) {
+    assert.match(
+      commandOutput(this),
+      new RegExp(`Reconsider decision ${escapeRegex(decisionId)}:`),
+    );
+  },
+);
+
+Then(
+  "the command explains how to resolve decision {string}",
+  function (this: PremiseWorld, decisionId: string) {
+    const output = commandOutput(this);
+    assert.match(output, new RegExp(`premise review ${escapeRegex(decisionId)}`));
+    assert.match(output, /Supersedes/);
+  },
+);
+
+Then(
+  "the command reports that decision {string} references unknown requirement {string}",
+  function (
+    this: PremiseWorld,
+    decisionId: string,
+    requirementId: string,
+  ) {
+    assert.match(
+      commandOutput(this),
+      new RegExp(
+        `Decision ${escapeRegex(decisionId)} .* references unknown requirement ${escapeRegex(requirementId)}`,
+      ),
+    );
+  },
+);
+
+Given(
+  "a passing executable requirement in the default feature directory",
+  async function (this: PremiseWorld) {
+    await linkPremisePackage({ projectDirectory: this.projectDirectory });
+    await writeExecutableRequirement({
+      featureDirectory: "features",
+      passing: true,
+      projectDirectory: this.projectDirectory,
+      stepsDirectory: "features/step_definitions",
+    });
+  },
+);
+
+Given(
+  "a failing executable requirement in the default feature directory",
+  async function (this: PremiseWorld) {
+    await linkPremisePackage({ projectDirectory: this.projectDirectory });
+    await writeExecutableRequirement({
+      featureDirectory: "features",
+      passing: false,
+      projectDirectory: this.projectDirectory,
+      stepsDirectory: "features/step_definitions",
+    });
+  },
+);
+
+Given(
+  "Premise is configured to find features in {string} and steps in {string}",
+  async function (
+    this: PremiseWorld,
+    featureDirectory: string,
+    stepsDirectory: string,
+  ) {
+    const configuration: PremiseConfiguration = {
+      cucumber: {
+        features: [`${featureDirectory}/**/*.feature`],
+        steps: [`${stepsDirectory}/**/*.ts`],
+      },
+      version: 1,
+    };
+    await writeJson(join(this.projectDirectory, "premise.json"), configuration);
+  },
+);
+
+Given(
+  "a passing executable requirement exists in the configured directories",
+  async function (this: PremiseWorld) {
+    await linkPremisePackage({ projectDirectory: this.projectDirectory });
+    await writeExecutableRequirement({
+      featureDirectory: "specifications",
+      passing: true,
+      projectDirectory: this.projectDirectory,
+      stepsDirectory: "specifications/support",
+    });
+  },
+);
+
+Given(
+  "executable requirement {string} exercises {string}",
+  async function (this: PremiseWorld, requirementId: string, artifactPath: string) {
+    await linkPremisePackage({ projectDirectory: this.projectDirectory });
+    await writeProjectFile({
+      content: [
+        `@${requirementId}`,
+        "Feature: Take a payment",
+        "  Scenario: Complete an accepted payment",
+        "    When the customer pays 10 pounds",
+        "    Then the payment is accepted",
+        "",
+      ].join("\n"),
+      projectDirectory: this.projectDirectory,
+      relativePath: `features/${requirementId}.feature`,
+    });
+    await writeProjectFile({
+      content: [
+        "export function takePayment(amount: number) {",
+        '  return amount > 0 ? "accepted" : "declined";',
+        "}",
+        "",
+      ].join("\n"),
+      projectDirectory: this.projectDirectory,
+      relativePath: artifactPath,
+    });
+    await writeProjectFile({
+      content: [
+        "export function recordPayment() {",
+        '  return "recorded";',
+        "}",
+        "",
+      ].join("\n"),
+      projectDirectory: this.projectDirectory,
+      relativePath: "src/payment-audit.ts",
+    });
+    await writeProjectFile({
+      content: [
+        'import assert from "node:assert/strict";',
+        'import { When, Then } from "@stuplum/premise/cucumber";',
+        'import { takePayment } from "../../src/payment.ts";',
+        'import { recordPayment } from "../../src/payment-audit.ts";',
+        "",
+        "void recordPayment;",
+        'let result = "";',
+        "",
+        'When("the customer pays 10 pounds", function () {',
+        "  result = takePayment(10);",
+        "});",
+        "",
+        'Then("the payment is accepted", function () {',
+        '  assert.equal(result, "accepted");',
+        "});",
+        "",
+      ].join("\n"),
+      projectDirectory: this.projectDirectory,
+      relativePath: "features/step_definitions/payment.steps.ts",
+    });
+  },
+);
+
+Given(
+  "executable requirement {string} exercises {string} through an extensionless import",
+  async function (this: PremiseWorld, requirementId: string, artifactPath: string) {
+    await linkPremisePackage({ projectDirectory: this.projectDirectory });
+    await writeProjectFile({
+      content: '{"type":"module"}\n',
+      projectDirectory: this.projectDirectory,
+      relativePath: "package.json",
+    });
+    await writeProjectFile({
+      content: '{"main":"index.cjs"}\n',
+      projectDirectory: this.projectDirectory,
+      relativePath: "apps/public/package.json",
+    });
+    await writeProjectFile({
+      content: [
+        `@${requirementId}`,
+        "Feature: Take a payment",
+        "  Scenario: Complete an accepted payment",
+        "    When the customer pays through an extensionless import",
+        "    Then the payment is accepted through an extensionless import",
+        "",
+      ].join("\n"),
+      projectDirectory: this.projectDirectory,
+      relativePath: `features/${requirementId}.feature`,
+    });
+    await writeProjectFile({
+      content: [
+        "export const takePayment = () => \"accepted\";",
+        "",
+      ].join("\n"),
+      projectDirectory: this.projectDirectory,
+      relativePath: artifactPath,
+    });
+    await writeProjectFile({
+      content: [
+        'import assert from "node:assert/strict";',
+        'import { When, Then } from "@stuplum/premise/cucumber";',
+        `import { takePayment } from "../../${artifactPath.replace(/\.ts$/, "")}";`,
+        "",
+        'let result = "";',
+        "",
+        'When("the customer pays through an extensionless import", function () {',
+        "  result = takePayment();",
+        "});",
+        "",
+        'Then("the payment is accepted through an extensionless import", function () {',
+        '  assert.equal(result, "accepted");',
+        "});",
+        "",
+      ].join("\n"),
+      projectDirectory: this.projectDirectory,
+      relativePath: "features/step_definitions/payment.steps.ts",
+    });
+  },
+);
+
+Given(
+  "an executable requirement uses aliases from {string}",
+  async function (this: PremiseWorld, configurationFile: string) {
+    await linkPremisePackage({ projectDirectory: this.projectDirectory });
+    await writeJson(join(this.projectDirectory, configurationFile), {
+      compilerOptions: {
+        baseUrl: ".",
+        module: "ESNext",
+        moduleResolution: "Bundler",
+        paths: { "@payments/*": ["src/*"] },
+        target: "ES2022",
+      },
+    });
+    await writeProjectFile({
+      content: [
+        "@PAY-001",
+        "Feature: Take a payment",
+        "  Scenario: Accept a valid payment",
+        "    When the customer pays",
+        "    Then the payment is accepted",
+        "",
+      ].join("\n"),
+      projectDirectory: this.projectDirectory,
+      relativePath: "features/PAY-001.feature",
+    });
+    await writeProjectFile({
+      content: [
+        "export function takePayment() {",
+        '  return "accepted";',
+        "}",
+        "",
+      ].join("\n"),
+      projectDirectory: this.projectDirectory,
+      relativePath: "src/payment.ts",
+    });
+    await writeProjectFile({
+      content: [
+        'import assert from "node:assert/strict";',
+        'import { Then, When } from "@stuplum/premise/cucumber";',
+        'import { takePayment } from "@payments/payment.ts";',
+        "",
+        'let result = "";',
+        "",
+        'When("the customer pays", function () {',
+        "  result = takePayment();",
+        "});",
+        "",
+        'Then("the payment is accepted", function () {',
+        '  assert.equal(result, "accepted");',
+        "});",
+        "",
+      ].join("\n"),
+      projectDirectory: this.projectDirectory,
+      relativePath: "features/step_definitions/payment.steps.ts",
+    });
+  },
+);
+
+Given(
+  "an executable requirement exists without step definitions",
+  async function (this: PremiseWorld) {
+    await writeProjectFile({
+      content: [
+        "@PAY-001",
+        "Feature: Take a payment",
+        "  Scenario: Accept a valid payment",
+        "    When the customer pays",
+        "",
+      ].join("\n"),
+      projectDirectory: this.projectDirectory,
+      relativePath: "features/PAY-001.feature",
+    });
+  },
+);
+
+Given(
+  "an executable requirement imports a missing implementation",
+  async function (this: PremiseWorld) {
+    await linkPremisePackage({ projectDirectory: this.projectDirectory });
+    await writeProjectFile({
+      content: [
+        "@PAY-001",
+        "Feature: Take a payment",
+        "  Scenario: Accept a valid payment",
+        "    When the customer pays",
+        "",
+      ].join("\n"),
+      projectDirectory: this.projectDirectory,
+      relativePath: "features/PAY-001.feature",
+    });
+    await writeProjectFile({
+      content: [
+        'import { When } from "@stuplum/premise/cucumber";',
+        'import { takePayment } from "../../src/missing.ts";',
+        "",
+        'When("the customer pays", function () {',
+        "  takePayment();",
+        "});",
+        "",
+      ].join("\n"),
+      projectDirectory: this.projectDirectory,
+      relativePath: "features/step_definitions/payment.steps.ts",
+    });
+  },
+);
+
+Given(
+  "an executable requirement dynamically imports {string} with a query",
+  async function (this: PremiseWorld, artifactPath: string) {
+    await linkPremisePackage({ projectDirectory: this.projectDirectory });
+    await writeProjectFile({
+      content: [
+        "@PAY-001",
+        "Feature: Take a payment",
+        "  Scenario: Accept a valid payment",
+        "    When the customer pays through a dynamic module",
+        "    Then the dynamic payment is accepted",
+        "",
+      ].join("\n"),
+      projectDirectory: this.projectDirectory,
+      relativePath: "features/PAY-001.feature",
+    });
+    await writeProjectFile({
+      content: [
+        "export function takePayment() {",
+        '  return "accepted";',
+        "}",
+        "",
+      ].join("\n"),
+      projectDirectory: this.projectDirectory,
+      relativePath: artifactPath,
+    });
+    await writeProjectFile({
+      content: [
+        'import assert from "node:assert/strict";',
+        'import { Then, When } from "@stuplum/premise/cucumber";',
+        "",
+        'let result = "";',
+        "",
+        'When("the customer pays through a dynamic module", async function () {',
+        '  const payment = await import("../../src/payment.ts?scenario=payment");',
+        "  result = payment.takePayment();",
+        "});",
+        "",
+        'Then("the dynamic payment is accepted", function () {',
+        '  assert.equal(result, "accepted");',
+        "});",
+        "",
+      ].join("\n"),
+      projectDirectory: this.projectDirectory,
+      relativePath: "features/step_definitions/payment.steps.ts",
+    });
+  },
+);
+
+Given(
+  "an executable requirement imports {string} without exercising it",
+  async function (this: PremiseWorld, artifactPath: string) {
+    await linkPremisePackage({ projectDirectory: this.projectDirectory });
+    await writeProjectFile({
+      content: [
+        "@PAY-001",
+        "Feature: Take a payment",
+        "  Scenario: Load the payment adapter",
+        "    When the payment adapter is loaded",
+        "",
+      ].join("\n"),
+      projectDirectory: this.projectDirectory,
+      relativePath: "features/PAY-001.feature",
+    });
+    await writeProjectFile({
+      content: [
+        "export function takePayment() {",
+        '  return "accepted";',
+        "}",
+        "",
+      ].join("\n"),
+      projectDirectory: this.projectDirectory,
+      relativePath: artifactPath,
+    });
+    await writeProjectFile({
+      content: [
+        'import { When } from "@stuplum/premise/cucumber";',
+        "",
+        'When("the payment adapter is loaded", async function () {',
+        '  await import("../../src/payment.ts");',
+        "});",
+        "",
+      ].join("\n"),
+      projectDirectory: this.projectDirectory,
+      relativePath: "features/step_definitions/payment.steps.ts",
+    });
+  },
+);
+
+Given(
+  "an executable requirement contains requirement-like comments and data",
+  async function (this: PremiseWorld) {
+    await linkPremisePackage({ projectDirectory: this.projectDirectory });
+    await writeProjectFile({
+      content: [
+        "@PAY-001",
+        "Feature: Take a payment",
+        "  # Historical reference: @PAY-009",
+        "  Scenario: Accept a valid payment",
+        "    When the customer pays with requirement data:",
+        '      """',
+        "      @PAY-010",
+        '      """',
+        "    Then the payment is accepted",
+        "",
+      ].join("\n"),
+      projectDirectory: this.projectDirectory,
+      relativePath: "features/PAY-001.feature",
+    });
+    await writeProjectFile({
+      content: [
+        "export function takePayment() {",
+        '  return "accepted";',
+        "}",
+        "",
+      ].join("\n"),
+      projectDirectory: this.projectDirectory,
+      relativePath: "src/payment.ts",
+    });
+    await writeProjectFile({
+      content: [
+        'import assert from "node:assert/strict";',
+        'import { Then, When } from "@stuplum/premise/cucumber";',
+        'import { takePayment } from "../../src/payment.ts";',
+        "",
+        'let result = "";',
+        "",
+        'When("the customer pays with requirement data:", function (_requirementData: string) {',
+        "  result = takePayment();",
+        "});",
+        "",
+        'Then("the payment is accepted", function () {',
+        '  assert.equal(result, "accepted");',
+        "});",
+        "",
+      ].join("\n"),
+      projectDirectory: this.projectDirectory,
+      relativePath: "features/step_definitions/payment.steps.ts",
+    });
+  },
+);
+
+Given(
+  "an executable requirement with a parallel Cucumber profile",
+  async function (this: PremiseWorld) {
+    await linkPremisePackage({ projectDirectory: this.projectDirectory });
+    await writeProjectFile({
+      content: "module.exports = { default: { parallel: 4 } };\n",
+      projectDirectory: this.projectDirectory,
+      relativePath: "cucumber.cjs",
+    });
+    await writeProjectFile({
+      content: [
+        "@PAY-001",
+        "Feature: Take a payment",
+        "  Scenario Outline: Accept a valid payment",
+        "    When the customer pays <amount> pounds",
+        "    Then the payment is accepted",
+        "",
+        "    Examples:",
+        "      | amount |",
+        "      | 10     |",
+        "      | 20     |",
+        "      | 30     |",
+        "      | 40     |",
+        "",
+      ].join("\n"),
+      projectDirectory: this.projectDirectory,
+      relativePath: "features/PAY-001.feature",
+    });
+    await writeProjectFile({
+      content: [
+        "export function takePayment(amount: number) {",
+        '  return amount > 0 ? "accepted" : "declined";',
+        "}",
+        "",
+      ].join("\n"),
+      projectDirectory: this.projectDirectory,
+      relativePath: "src/payment.ts",
+    });
+    await writeProjectFile({
+      content: [
+        'import assert from "node:assert/strict";',
+        'import { appendFileSync } from "node:fs";',
+        'import { Then, When } from "@stuplum/premise/cucumber";',
+        'import { takePayment } from "../../src/payment.ts";',
+        "",
+        'appendFileSync("workers.log", `${process.env.NODE_V8_COVERAGE}\\t${process.pid}\\n`);',
+        "void takePayment(0);",
+        'let result = "";',
+        "",
+        'When("the customer pays {int} pounds", function (amount: number) {',
+        "  result = takePayment(amount);",
+        "});",
+        "",
+        'Then("the payment is accepted", function () {',
+        '  assert.equal(result, "accepted");',
+        "});",
+        "",
+      ].join("\n"),
+      projectDirectory: this.projectDirectory,
+      relativePath: "features/step_definitions/payment.steps.ts",
+    });
+  },
+);
+
+Then(
+  "Premise uses one worker for both coverage runs",
+  async function (this: PremiseWorld) {
+    const workers = (
+      await readFile(join(this.projectDirectory, "workers.log"), "utf8")
+    )
+      .trim()
+      .split("\n")
+      .map((line) => line.split("\t"));
+    const baselineWorkers = new Set(
+      workers
+        .filter(([directory]) => directory.includes("premise-baseline-"))
+        .map(([, processId]) => processId),
+    );
+    const realWorkers = new Set(
+      workers
+        .filter(([directory]) => directory.includes("premise-coverage-"))
+        .map(([, processId]) => processId),
+    );
+    assert.equal(
+      baselineWorkers.size,
+      1,
+      `Baseline workers: ${baselineWorkers.size}`,
+    );
+    assert.equal(realWorkers.size, 1, `Real workers: ${realWorkers.size}`);
+  },
+);
+
+Given(
+  "requirement ID {string} appears in two executable feature files",
+  async function (this: PremiseWorld, requirementId: string) {
+    await linkPremisePackage({ projectDirectory: this.projectDirectory });
+    for (const featureName of ["first-payment", "second-payment"]) {
+      await writeProjectFile({
+        content: [
+          `@${requirementId}`,
+          `Feature: ${featureName}`,
+          "  Scenario: Accept a valid payment",
+          "    When the customer pays 10 pounds",
+          "    Then the payment is accepted",
+          "",
+        ].join("\n"),
+        projectDirectory: this.projectDirectory,
+        relativePath: `features/${featureName}.feature`,
+      });
+    }
+    await writeProjectFile({
+      content: [
+        "export function takePayment(amount: number) {",
+        '  return amount > 0 ? "accepted" : "declined";',
+        "}",
+        "",
+      ].join("\n"),
+      projectDirectory: this.projectDirectory,
+      relativePath: "src/payment.ts",
+    });
+    await writeProjectFile({
+      content: [
+        'import assert from "node:assert/strict";',
+        'import { Then, When } from "@stuplum/premise/cucumber";',
+        'import { takePayment } from "../../src/payment.ts";',
+        "",
+        'let result = "";',
+        "",
+        'When("the customer pays 10 pounds", function () {',
+        "  result = takePayment(10);",
+        "});",
+        "",
+        'Then("the payment is accepted", function () {',
+        '  assert.equal(result, "accepted");',
+        "});",
+        "",
+      ].join("\n"),
+      projectDirectory: this.projectDirectory,
+      relativePath: "features/step_definitions/payment.steps.ts",
+    });
+  },
+);
+
+Given(
+  "one executable feature contains requirement IDs {string} and {string}",
+  async function (
+    this: PremiseWorld,
+    firstRequirementId: string,
+    secondRequirementId: string,
+  ) {
+    await linkPremisePackage({ projectDirectory: this.projectDirectory });
+    await writeProjectFile({
+      content: [
+        `@${firstRequirementId} @${secondRequirementId}`,
+        "Feature: Take payments",
+        "  Scenario: Accept a valid payment",
+        "    When the customer pays 10 pounds",
+        "    Then the payment is accepted",
+        "",
+      ].join("\n"),
+      projectDirectory: this.projectDirectory,
+      relativePath: "features/payments.feature",
+    });
+    await writeProjectFile({
+      content: [
+        "export function takePayment(amount: number) {",
+        '  return amount > 0 ? "accepted" : "declined";',
+        "}",
+        "",
+      ].join("\n"),
+      projectDirectory: this.projectDirectory,
+      relativePath: "src/payment.ts",
+    });
+    await writeProjectFile({
+      content: [
+        'import assert from "node:assert/strict";',
+        'import { Then, When } from "@stuplum/premise/cucumber";',
+        'import { takePayment } from "../../src/payment.ts";',
+        "",
+        'let result = "";',
+        "",
+        'When("the customer pays 10 pounds", function () {',
+        "  result = takePayment(10);",
+        "});",
+        "",
+        'Then("the payment is accepted", function () {',
+        '  assert.equal(result, "accepted");',
+        "});",
+        "",
+      ].join("\n"),
+      projectDirectory: this.projectDirectory,
+      relativePath: "features/step_definitions/payment.steps.ts",
+    });
+  },
+);
+
+Given(
+  "malformed compiled context exists for {string}",
+  async function (this: PremiseWorld, artifactPath: string) {
+    await writeProjectFile({
+      content: JSON.stringify(
+        {
+          artifact: artifactPath,
+          requirements: "not-an-array",
+          version: 1,
+        },
+        null,
+        2,
+      ),
+      projectDirectory: this.projectDirectory,
+      relativePath: `.premise/compiled/${artifactPath}.json`,
+    });
+  },
+);
+
+Then(
+  "the command returns the current Gherkin for requirement {string}",
+  async function (this: PremiseWorld, requirementId: string) {
+    const source = `features/${requirementId}.feature`;
+    const feature = await readFile(join(this.projectDirectory, source), "utf8");
+    assert.ok(commandOutput(this).includes(feature.trim()));
+  },
+);
+
+Then(
+  "the command returns the current source for decision {string}",
+  async function (this: PremiseWorld, decisionId: string) {
+    const source = `decisions/${decisionId}.decision`;
+    const decision = await readFile(join(this.projectDirectory, source), "utf8");
+    assert.ok(commandOutput(this).includes(decision.trim()));
+  },
+);
+
+Then("no generated decision state is created", async function (this: PremiseWorld) {
+  await assert.rejects(access(join(this.projectDirectory, ".premise/decisions")));
+});
+
+Then(
+  "a review receipt exists for decision {string}",
+  async function (this: PremiseWorld, decisionId: string) {
+    await access(
+      join(this.projectDirectory, `.premise/reviews/${decisionId}.json`),
+    );
+  },
+);
+
+Then(
+  "the command returns source {string}",
+  async function (this: PremiseWorld, source: string) {
+    const content = await readFile(join(this.projectDirectory, source), "utf8");
+    assert.ok(commandOutput(this).includes(content.trim()));
+  },
+);
+
+Then(
+  "the command reports unknown superseded decision {string}",
+  function (this: PremiseWorld, decisionId: string) {
+    assert.match(
+      commandOutput(this),
+      new RegExp(`supersedes unknown decision ${escapeRegex(decisionId)}`),
+    );
+  },
+);
+
+Then("no legacy Premise files are created", async function (this: PremiseWorld) {
+  await assert.rejects(access(join(this.projectDirectory, "premise.json")));
+  await assert.rejects(access(join(this.projectDirectory, "premise.lock")));
+});
+
+Then("the command reports only the supported commands", function (this: PremiseWorld) {
+  assert.match(
+    commandOutput(this),
+    /Usage: premise <test\|context\|check\|acknowledge\|review>/,
+  );
+});
+
+Then("the command reports invalid Premise configuration", function (this: PremiseWorld) {
+  assert.match(commandOutput(this), /Invalid Premise configuration/);
+});
+
+Then(
+  "the command reports no compiled context for {string}",
+  function (this: PremiseWorld, artifactPath: string) {
+    assert.match(
+      commandOutput(this),
+      new RegExp(`No compiled context for ${artifactPath}`),
+    );
+  },
+);
+
+Then(
+  "the command reports that the path must be inside the project",
+  function (this: PremiseWorld) {
+    assert.match(commandOutput(this), /must be inside the project/);
+  },
+);
+
+Then(
+  "the command reports that no executable requirements matched",
+  function (this: PremiseWorld) {
+    assert.match(commandOutput(this), /No executable requirements matched/);
+  },
+);
+
+Then(
+  "the command reports that no step definitions matched",
+  function (this: PremiseWorld) {
+    assert.match(commandOutput(this), /No step definitions matched/);
+  },
+);
+
+Then("the command reports the missing implementation import", function (this: PremiseWorld) {
+  assert.match(commandOutput(this), /src\/missing\.ts/);
+});
+
+Then(
+  "the command warns that dynamic module coverage may be unreliable",
+  function (this: PremiseWorld) {
+    assert.match(
+      commandOutput(this),
+      /Dynamic module coverage may be unreliable/,
+    );
+  },
+);
+
+Then(
+  "the command warns that {string} has no requirement ID",
+  function (this: PremiseWorld, source: string) {
+    assert.match(
+      commandOutput(this),
+      new RegExp(
+        `No requirement ID found in ${escapeRegex(source)}; no context was compiled\\.`,
+      ),
+    );
+  },
+);
+
+Then(
+  "the command reports duplicate requirement ID {string}",
+  function (this: PremiseWorld, requirementId: string) {
+    assert.match(
+      commandOutput(this),
+      new RegExp(`Duplicate requirement ID ${requirementId}`),
+    );
+  },
+);
+
+Then(
+  "the command reports that {string} must contain one requirement ID",
+  function (this: PremiseWorld, source: string) {
+    assert.match(
+      commandOutput(this),
+      new RegExp(
+        `${escapeRegex(source)} must contain at most one requirement ID`,
+      ),
+    );
+  },
+);
+
+Then(
+  "the command reports invalid compiled context",
+  function (this: PremiseWorld) {
+    assert.match(commandOutput(this), /Invalid compiled context/);
+  },
+);
+
+Then(
+  "the command reports that requirement source {string} no longer exists",
+  function (this: PremiseWorld, source: string) {
+    assert.match(
+      commandOutput(this),
+      new RegExp(
+        `Requirement source ${escapeRegex(source)} no longer exists\\. Run premise test\\.`,
+      ),
+    );
+  },
+);
+
+Then(
+  "compiled context for {string} contains only requirement {string}",
+  async function (
+    this: PremiseWorld,
+    artifactPath: string,
+    requirementId: string,
+  ) {
+    const context = JSON.parse(
+      await readFile(
+        join(this.projectDirectory, `.premise/compiled/${artifactPath}.json`),
+        "utf8",
+      ),
+    ) as { requirements: Array<{ id: string }> };
+    assert.deepEqual(
+      context.requirements.map(({ id }) => id),
+      [requirementId],
+    );
+  },
+);
+
+Then("the executable requirement ran", async function (this: PremiseWorld) {
+  assert.equal(
+    await readFile(join(this.projectDirectory, "requirement-ran.txt"), "utf8"),
+    "yes\n",
+  );
+});
+
+Then(
+  "the command reports that the executable requirement failed",
+  function (this: PremiseWorld) {
+    assert.match(commandOutput(this), /the requirement is satisfied/);
+  },
+);
+
+After(async function (this: PremiseWorld) {
+  if (this.projectDirectory) {
+    await rm(this.projectDirectory, { force: true, recursive: true });
+  }
+});
+
+function splitCommand(command: string) {
+  return command.split(" ");
+}
+
+function commandResult(world: PremiseWorld) {
+  assert.ok(world.result, "No command has been run");
+  return world.result;
+}
+
+function commandOutput(world: PremiseWorld) {
+  const result = commandResult(world);
+  return `${result.stdout}${result.stderr}`.trim();
+}
+
+async function writeProjectFile({
+  content,
+  projectDirectory,
+  relativePath,
+}: {
+  content: string;
+  projectDirectory: string;
+  relativePath: string;
+}) {
+  const path = join(projectDirectory, relativePath);
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, content, "utf8");
+}
+
+async function writeJson(path: string, value: unknown) {
+  await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+}
+
+function escapeRegex(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function runGit({
+  arguments: arguments_,
+  projectDirectory,
+}: {
+  arguments: string[];
+  projectDirectory: string;
+}) {
+  const result = spawnSync("git", arguments_, {
+    cwd: projectDirectory,
+    encoding: "utf8",
+  });
+  assert.equal(
+    result.status,
+    0,
+    result.error?.message ?? `${result.stdout}${result.stderr}`,
+  );
+}
+
+function runPremise({
+  arguments: arguments_,
+  projectDirectory,
+}: {
+  arguments: string[];
+  projectDirectory: string;
+}) {
+  return spawnSync(process.execPath, [cliPath, ...arguments_], {
+    cwd: projectDirectory,
+    encoding: "utf8",
+  });
+}
+
+async function writeDecision({
+  decisionId,
+  driver,
+  projectDirectory,
+  supersededDecisionId,
+}: {
+  decisionId: string;
+  driver: string;
+  projectDirectory: string;
+  supersededDecisionId?: string;
+}) {
+  await writeProjectFile({
+    content: [
+      `Decision ${decisionId} "Reliable confirmation delivery"`,
+      `Driven by ${driver}`,
+      "Choose durable storage of pending confirmations",
+      "Because accepted orders must survive delivery outages",
+      "Accept possible duplicate delivery",
+      supersededDecisionId ? `Supersedes ${supersededDecisionId}` : undefined,
+      "",
+    ]
+      .filter((line): line is string => line !== undefined)
+      .join("\n"),
+    projectDirectory,
+    relativePath: `decisions/${decisionId}.decision`,
+  });
+}
+
+async function linkPremisePackage({
+  projectDirectory,
+}: {
+  projectDirectory: string;
+}) {
+  const nodeModulesDirectory = join(projectDirectory, "node_modules");
+  const scopeDirectory = join(nodeModulesDirectory, "@stuplum");
+  await mkdir(scopeDirectory, { recursive: true });
+  await symlink(resolve("."), join(scopeDirectory, "premise"), "dir");
+}
+
+async function writeExecutableRequirement({
+  featureDirectory,
+  passing,
+  projectDirectory,
+  stepsDirectory,
+}: {
+  featureDirectory: string;
+  passing: boolean;
+  projectDirectory: string;
+  stepsDirectory: string;
+}) {
+  await writeProjectFile({
+    content: [
+      "Feature: Execute a requirement",
+      "  Scenario: Run through bundled Cucumber",
+      "    Given the bundled runner is available",
+      "    Then the requirement is satisfied",
+      "",
+    ].join("\n"),
+    projectDirectory,
+    relativePath: `${featureDirectory}/example.feature`,
+  });
+  await writeProjectFile({
+    content: [
+      'import assert from "node:assert/strict";',
+      'import { writeFile } from "node:fs/promises";',
+      'import { Given, Then } from "@stuplum/premise/cucumber";',
+      "",
+      "let runnerAvailable: boolean = false;",
+      "",
+      'Given("the bundled runner is available", function () {',
+      "  runnerAvailable = true;",
+      "});",
+      "",
+      'Then("the requirement is satisfied", async function () {',
+      `  assert.equal(runnerAvailable, ${passing});`,
+      '  await writeFile("requirement-ran.txt", "yes\\n", "utf8");',
+      "});",
+      "",
+    ].join("\n"),
+    projectDirectory,
+    relativePath: `${stepsDirectory}/example.steps.ts`,
+  });
+}

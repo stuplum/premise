@@ -1,0 +1,21 @@
+document = decision, driver, { driver }, choice, rationale, { acceptance }, [ supersession ] ;
+
+decision = "Decision", whitespace, identifier, whitespace, quoted-title ;
+driver = "Driven by", whitespace, identifier, whitespace, identifier ;
+choice = "Choose", whitespace, text ;
+rationale = "Because", whitespace, text ;
+acceptance = "Accept", whitespace, text ;
+supersession = "Supersedes", whitespace, identifier ;
+
+quoted-title = '"', title-character, { title-character }, '"' ;
+identifier = identifier-character, { identifier-character } ;
+text = text-character, { text-character } ;
+whitespace = whitespace-character, { whitespace-character } ;
+
+title-character = ? any Unicode character except double quote or line break ? ;
+identifier-character = ? any Unicode character except whitespace ? ;
+text-character = ? any Unicode character except line break ? ;
+whitespace-character = ? space or tab ? ;
+
+(* Blank lines are ignored. Leading and trailing whitespace on each line is ignored. *)
+(* Keywords are case-sensitive. Each production occupies one non-blank line. *)

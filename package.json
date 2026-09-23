@@ -1,0 +1,74 @@
+{
+  "name": "@stuplum/premise",
+  "version": "0.1.0",
+  "description": "Executable requirements and enforceable architecture decisions for software teams and coding agents.",
+  "keywords": [
+    "bdd",
+    "cucumber",
+    "gherkin",
+    "architecture-decisions",
+    "repository-knowledge",
+    "ai-agents",
+    "developer-tools"
+  ],
+  "author": "stuplum",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stuplum/premise.git"
+  },
+  "bugs": {
+    "url": "https://github.com/stuplum/premise/issues"
+  },
+  "homepage": "https://github.com/stuplum/premise#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "packageManager": "pnpm@10.27.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./cucumber": {
+      "types": "./dist/cucumber.d.ts",
+      "default": "./dist/cucumber.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "premise": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "grammar",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "prepare": "npm run build",
+    "pretest": "pnpm build",
+    "prepublishOnly": "pnpm verify",
+    "test": "node --import tsx ./node_modules/@cucumber/cucumber/bin/cucumber.js --import 'features/step_definitions/**/*.ts'",
+    "typecheck": "tsc --noEmit",
+    "verify": "pnpm typecheck && pnpm test"
+  },
+  "dependencies": {
+    "@cucumber/cucumber": "^12.2.0",
+    "@cucumber/gherkin": "^38.0.0",
+    "@cucumber/messages": "^32.3.1",
+    "glob": "^13.0.6",
+    "tsx": "^4.20.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  },
+  "sideEffects": false
+}
