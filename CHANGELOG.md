@@ -2,7 +2,14 @@
 
 ## Unreleased
 
-Initial experimental release.
+## 0.1.1 - 2026-09-24
+
+- Makes provider definitions reusable across projects through explicit,
+  project-scoped sessions.
+- Adds executable interleaving validation for the bundled Cucumber and
+  dependency-cruiser providers.
+- Adds adoption, discovery, audit, and onboarding prompts with expanded
+  provider and decision documentation.
 
 - Runs executable Gherkin through bundled Cucumber support.
 - Evaluates executable premises through provider-neutral `established`,
