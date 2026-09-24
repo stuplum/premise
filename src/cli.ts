@@ -47,13 +47,14 @@ async function run({
 }
 
 async function runCheck({ projectDirectory }: { projectDirectory: string }) {
-  const [evaluations, affectedDecisions] = await Promise.all([
-    evaluatePremises({
-      projectDirectory,
-      providers: createDefaultProviders({ silentCucumber: true }),
-    }),
-    findDecisionsRequiringReview({ projectDirectory }),
-  ]);
+  const evaluations = await evaluatePremises({
+    projectDirectory,
+    providers: createDefaultProviders({ silentCucumber: true }),
+  });
+  const affectedDecisions = await findDecisionsRequiringReview({
+    evaluations,
+    projectDirectory,
+  });
 
   for (const evaluation of evaluations) {
     writeUnestablishedPremise(evaluation);
@@ -101,10 +102,13 @@ function writeUnestablishedPremise({
 function writeAffectedDecision({
   decision,
   drivers,
+  reasons,
 }: DecisionRequiringReview): void {
   process.stdout.write(
     [
       `Reconsider decision ${decision.decision.id}: ${decision.decision.title}`,
+      "",
+      ...reasons.map(({ message }) => `Reason: ${message}`),
       "",
       ...drivers.flatMap((driver) => [
         `Driver source: ${driver.uri}`,

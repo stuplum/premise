@@ -11,6 +11,8 @@ Initial experimental release.
   Cucumber behaviour and compiles their subject evidence into shared context.
 - Resolves `Driven by premise` decision relationships through the generic
   provider registry; legacy `Driven by requirement` syntax remains compatible.
+- Separates provider evaluation from graph-derived knowledge state and
+  propagates explained `reconsider` state through dependent decisions.
 - Discovers implementation relationships from successful feature execution.
 - Stores compiled relationships as provider-neutral schema v2 premise evidence
   without executable-validity fingerprints.
