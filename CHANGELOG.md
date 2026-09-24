@@ -8,6 +8,10 @@ Initial experimental release.
 - Evaluates executable premises through provider-neutral `established`,
   `failed`, and `unknown` results during `premise check`.
 - Discovers implementation relationships from successful feature execution.
+- Stores compiled relationships as provider-neutral schema v2 premise evidence
+  without executable-validity fingerprints.
+- Removes `premise acknowledge`; executable premises are established only by
+  provider evaluation.
 - Retrieves live requirement context for implementation files.
 - Provides a standalone architecture-decision language with a distributable
   grammar and source-located AST.

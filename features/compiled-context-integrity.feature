@@ -29,6 +29,13 @@ Feature: Refuse or expose unreliable compiled context
     Then the command fails
     And the command reports invalid compiled context
 
+  Scenario: Explain how to replace legacy generated context
+    Given an empty project
+    And legacy compiled context exists for "src/payment.ts"
+    When I run "premise context src/payment.ts"
+    Then the command fails
+    And the command reports that compiled context must be regenerated
+
   Scenario: Explain when a compiled requirement source no longer exists
     Given an empty project
     And executable requirement "PAY-001" exercises "src/payment.ts"
@@ -37,7 +44,7 @@ Feature: Refuse or expose unreliable compiled context
     Given the source for requirement "PAY-001" has been deleted
     When I run "premise context src/payment.ts"
     Then the command fails
-    And the command reports that requirement source "features/PAY-001.feature" no longer exists
+    And the command reports that premise source "features/PAY-001.feature" no longer exists
 
   Scenario: Ignore an application module that is imported but not exercised
     Given an empty project
@@ -53,7 +60,7 @@ Feature: Refuse or expose unreliable compiled context
     And an executable requirement contains requirement-like comments and data
     When I run "premise test"
     Then the command succeeds
-    And compiled context for "src/payment.ts" contains only requirement "PAY-001"
+    And compiled context for "src/payment.ts" records premise "PAY-001" from provider "cucumber"
 
   Scenario: Ignore the consumer's parallel profile during coverage discovery
     Given an empty project

@@ -1,10 +1,7 @@
 #!/usr/bin/env node
 
 import { runExecutableRequirements } from "./executable-requirements.js";
-import {
-  acknowledgeCompiledRequirement,
-  readArtifactGherkin,
-} from "./compiled-context.js";
+import { readArtifactSources } from "./compiled-context.js";
 import {
   findDecisionsRequiringReview,
   reviewDecision,
@@ -41,14 +38,11 @@ async function run({
       requireNoArguments({ command, commandArguments });
       await runCheck({ projectDirectory });
       return;
-    case "acknowledge":
-      await runAcknowledge({ commandArguments, projectDirectory });
-      return;
     case "review":
       await runReview({ commandArguments, projectDirectory });
       return;
     default:
-      throw new Error("Usage: premise <test|context|check|acknowledge|review>");
+      throw new Error("Usage: premise <test|context|check|review>");
   }
 }
 
@@ -156,36 +150,13 @@ async function runContext({
     throw new Error("Usage: premise context <artifact>");
   }
 
-  const sources = await readArtifactGherkin({ artifact, projectDirectory });
+  const sources = await readArtifactSources({ artifact, projectDirectory });
   if (sources.length === 0) {
     process.stdout.write(`No compiled context for ${artifact}\n`);
     return;
   }
   for (const source of sources) {
     process.stdout.write(`${source.content.trim()}\n`);
-  }
-}
-
-async function runAcknowledge({
-  commandArguments,
-  projectDirectory,
-}: {
-  commandArguments: string[];
-  projectDirectory: string;
-}) {
-  const [requirementId, ...remainingArguments] = commandArguments;
-
-  if (!requirementId || remainingArguments.length > 0) {
-    throw new Error("Usage: premise acknowledge <requirement-id>");
-  }
-
-  const acknowledged = await acknowledgeCompiledRequirement({
-    projectDirectory,
-    requirementId,
-  });
-
-  if (!acknowledged) {
-    throw new Error(`Requirement ${requirementId} is not compiled`);
   }
 }
 

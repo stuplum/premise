@@ -125,11 +125,15 @@ does not treat a changed source fingerprint as proof that a premise failed.
 Decision review remains a separate human-judgement lifecycle backed by review
 receipts.
 
-Compiled context still uses the earlier requirement/fingerprint persistence
-shape. Those fingerprints are legacy context data rather than executable
-validity, pending replacement with provider-neutral evidence. A genuinely
-different second provider remains the test of whether the implemented boundary
-is sufficiently generic.
+Compiled context schema v2 persists provider-neutral premise relationships and
+evidence. It contains premise type, assertion dialect/reference, provider
+identity, and evidence URIs with optional roles/ranges. It contains no validity
+fingerprints. Schema v1 files fail with an instruction to regenerate them by
+running `premise test`.
+
+`premise acknowledge` has been removed because administrative acknowledgement
+cannot establish executable truth. A genuinely different second provider
+remains the test of whether the implemented boundary is sufficiently generic.
 
 Untagged Gherkin features remain executable for compatibility. The Cucumber
 provider gives them an internal `cucumber:<uri>` identity so they can pass

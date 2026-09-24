@@ -119,7 +119,9 @@ premise test
 
 For successful tagged features, Premise compares dry-run and real execution
 coverage and records the implementation functions exercised by the scenarios.
-The generated relationships live under `.premise/compiled/` and are committed.
+The provider-neutral relationships live under `.premise/compiled/` and are
+committed. Each schema v2 entry records the premise identity, type, assertion,
+provider, and live evidence; it does not store validity fingerprints.
 
 An engineer or agent can then retrieve the current requirement relevant to an
 implementation file without loading the repository's entire documentation set:

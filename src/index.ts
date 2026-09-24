@@ -1,9 +1,17 @@
 export { calculateFingerprint } from "./fingerprint.js";
+export {
+  compilePremiseEvaluations,
+  readArtifactContext,
+} from "./compiled-context.js";
 export { parseDecision } from "./decision-parser.js";
 export { readConfiguration } from "./repository.js";
 export { runExecutableRequirements } from "./executable-requirements.js";
 export { evaluatePremises } from "./provider.js";
 export { createCucumberProvider } from "./providers/cucumber-provider.js";
+export type {
+  ArtifactContext,
+  CompiledPremise,
+} from "./compiled-context.js";
 export type {
   DecisionAst,
   DecisionDriver,
@@ -26,7 +34,6 @@ export type {
   SourceRange,
 } from "./provider.js";
 export type {
-  ChangedRequirement,
   CucumberConfiguration,
   PremiseConfiguration,
 } from "./model.js";
