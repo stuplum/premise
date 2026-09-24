@@ -11,6 +11,11 @@ export async function runExecutableRequirements({
     projectDirectory,
     providers: [createCucumberProvider()],
   });
+  for (const { result } of evaluations) {
+    if (result.status === "unknown") {
+      process.stderr.write(`${result.reason}\n`);
+    }
+  }
   if (evaluations.some(({ result }) => result.status !== "established")) {
     return false;
   }

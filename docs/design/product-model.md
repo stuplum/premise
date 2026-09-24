@@ -120,10 +120,16 @@ The current package implements:
 - decision-driver resolution and supersession validation; and
 - committed review receipts enforced by `premise check`.
 
-Compiled context and `premise check` still use the earlier
-requirement/fingerprint lifecycle. They are intentionally not presented as part
-of the provider abstraction yet. A genuinely different second provider remains
-the test of whether the implemented boundary is sufficiently generic.
+`premise check` derives executable premise state from provider evaluation. It
+does not treat a changed source fingerprint as proof that a premise failed.
+Decision review remains a separate human-judgement lifecycle backed by review
+receipts.
+
+Compiled context still uses the earlier requirement/fingerprint persistence
+shape. Those fingerprints are legacy context data rather than executable
+validity, pending replacement with provider-neutral evidence. A genuinely
+different second provider remains the test of whether the implemented boundary
+is sufficiently generic.
 
 Untagged Gherkin features remain executable for compatibility. The Cucumber
 provider gives them an internal `cucumber:<uri>` identity so they can pass

@@ -16,6 +16,7 @@ import { readConfiguration } from "../repository.js";
 
 type CucumberProject = {
   projectDirectory: string;
+  silent: boolean;
   stepFiles: string[];
   stepPaths: string[];
   typeScriptConfiguration?: string;
@@ -25,14 +26,24 @@ type CucumberProject = {
 const defaultFeaturePaths = ["features/**/*.feature"];
 const defaultStepPaths = ["features/step_definitions/**/*.ts"];
 
-export function createCucumberProvider(): PremiseProvider {
+export function createCucumberProvider({
+  allowEmpty = false,
+  silent = false,
+}: {
+  allowEmpty?: boolean;
+  silent?: boolean;
+} = {}): PremiseProvider {
   let project: CucumberProject | undefined;
 
   return {
     dialects: ["gherkin"],
     id: "cucumber",
     async discover(context) {
-      const discovery = await discoverCucumberPremises(context);
+      const discovery = await discoverCucumberPremises({
+        allowEmpty,
+        context,
+        silent,
+      });
       project = discovery.project;
       return discovery.premises;
     },
@@ -46,11 +57,18 @@ export function createCucumberProvider(): PremiseProvider {
 }
 
 async function discoverCucumberPremises({
-  projectDirectory,
-}: EvaluationContext): Promise<{
+  allowEmpty,
+  context,
+  silent,
+}: {
+  allowEmpty: boolean;
+  context: EvaluationContext;
+  silent: boolean;
+}): Promise<{
   premises: Premise[];
   project: CucumberProject;
 }> {
+  const { projectDirectory } = context;
   const configuration = await readConfiguration({ projectDirectory });
   const featurePaths = configuration.cucumber?.features ?? defaultFeaturePaths;
   const stepPaths = configuration.cucumber?.steps ?? defaultStepPaths;
@@ -58,16 +76,13 @@ async function discoverCucumberPremises({
     glob(featurePaths, { cwd: projectDirectory, nodir: true }),
     glob(stepPaths, { cwd: projectDirectory, nodir: true }),
   ]);
-  requireMatches({
-    kind: "executable requirements",
-    matches: featureFiles,
-    patterns: featurePaths,
-  });
-  requireMatches({
-    kind: "step definitions",
-    matches: stepFiles,
-    patterns: stepPaths,
-  });
+  if (!allowEmpty) {
+    requireMatches({
+      kind: "executable requirements",
+      matches: featureFiles,
+      patterns: featurePaths,
+    });
+  }
 
   const warnedDynamicModules = new Set<string>();
   for (const path of await findDynamicImportStepFiles({
@@ -106,6 +121,7 @@ async function discoverCucumberPremises({
     premises,
     project: {
       projectDirectory,
+      silent,
       stepFiles,
       stepPaths,
       typeScriptConfiguration: await findTypeScriptConfiguration({
@@ -125,6 +141,13 @@ async function evaluateCucumberPremise({
   premise: Premise;
   project: CucumberProject;
 }): Promise<EvaluationResult> {
+  if (project.stepFiles.length === 0) {
+    return {
+      reason: `No step definitions matched: ${project.stepPaths.join(", ")}`,
+      status: "unknown",
+    };
+  }
+
   const baselineCoverageDirectory = await mkdtemp(
     join(tmpdir(), "premise-baseline-"),
   );
@@ -149,7 +172,7 @@ async function evaluateCucumberPremise({
         arguments: ["--dry-run", ...cucumberArguments, source],
         coverageDirectory: baselineCoverageDirectory,
         projectDirectory: context.projectDirectory,
-        silent: false,
+        silent: project.silent,
         typeScriptConfiguration: project.typeScriptConfiguration,
       });
       return failedEvaluation({
@@ -162,7 +185,7 @@ async function evaluateCucumberPremise({
       arguments: [...cucumberArguments, source],
       coverageDirectory,
       projectDirectory: context.projectDirectory,
-      silent: false,
+      silent: project.silent,
       typeScriptConfiguration: project.typeScriptConfiguration,
     });
     if (exitCode !== 0) {

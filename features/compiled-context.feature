@@ -12,32 +12,33 @@ Feature: Compile executable requirements into implementation context
     And the command returns the current Gherkin for requirement "PAY-001"
     And no legacy Premise files are created
 
-  Scenario: A changed requirement invalidates its discovered implementation context
+  Scenario: Establish a changed requirement through provider evaluation
     Given an empty project
     And executable requirement "PAY-001" exercises "src/payment.ts"
     When I run "premise test"
     Then the command succeeds
     When requirement "PAY-001" has changed
-    And I run "premise test"
+    And I run "premise check"
     Then the command succeeds
+
+  Scenario: Reject a changed requirement that is no longer satisfied
+    Given an empty project
+    And executable requirement "PAY-001" exercises "src/payment.ts"
+    When I run "premise test"
+    Then the command succeeds
+    When requirement "PAY-001" has changed
+    And the payment implementation no longer satisfies the requirement
     And I run "premise check"
     Then the command fails
-    And the command reports that "PAY-001" changed
-    And the command reports "src/payment.ts" for reconsideration
+    And the command reports that premise "PAY-001" failed
 
-  Scenario: Acknowledge a changed requirement after reconsidering discovered implementation
+  Scenario: Report a premise that the provider cannot evaluate
     Given an empty project
-    And executable requirement "PAY-001" exercises "src/payment.ts"
-    When I run "premise test"
-    Then the command succeeds
-    When requirement "PAY-001" has changed
-    And I run "premise test"
-    Then the command succeeds
-    When I run "premise acknowledge PAY-001"
-    Then the command succeeds
+    And an executable requirement exists without step definitions
     When I run "premise check"
-    Then the command succeeds
-    And the command produces no output
+    Then the command fails
+    And the command reports that premise "PAY-001" is unknown
+    And the command reports that no step definitions matched
 
   Scenario: Ignore code loaded by the test adapter but not exercised by the requirement
     Given an empty project

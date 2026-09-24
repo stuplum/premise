@@ -74,6 +74,7 @@ Given(
 Given(
   "requirement {string} exists",
   async function (this: PremiseWorld, requirementId: string) {
+    await linkPremisePackage({ projectDirectory: this.projectDirectory });
     await writeProjectFile({
       content: [
         `@${requirementId}`,
@@ -86,6 +87,33 @@ Given(
       projectDirectory: this.projectDirectory,
       relativePath: `features/${requirementId}.feature`,
     });
+    await writeProjectFile({
+      content: [
+        'import { When, Then } from "@stuplum/premise/cucumber";',
+        "",
+        'When("the customer pays", function () {});',
+        'Then("the payment is accepted", function () {});',
+        "",
+      ].join("\n"),
+      projectDirectory: this.projectDirectory,
+      relativePath: "features/step_definitions/payment.steps.ts",
+    });
+  },
+);
+
+Given(
+  "the payment implementation no longer satisfies the requirement",
+  async function (this: PremiseWorld) {
+    const path = join(this.projectDirectory, "src/payment.ts");
+    const content = await readFile(path, "utf8");
+    await writeFile(
+      path,
+      content.replace(
+        'return amount > 0 ? "accepted" : "declined";',
+        'return "declined";',
+      ),
+      "utf8",
+    );
   },
 );
 
@@ -1127,6 +1155,26 @@ Then(
   },
 );
 
+Then(
+  "the command reports that premise {string} failed",
+  function (this: PremiseWorld, premiseId: string) {
+    assert.match(
+      commandOutput(this),
+      new RegExp(`${escapeRegex(premiseId)} failed`),
+    );
+  },
+);
+
+Then(
+  "the command reports that premise {string} is unknown",
+  function (this: PremiseWorld, premiseId: string) {
+    assert.match(
+      commandOutput(this),
+      new RegExp(`${escapeRegex(premiseId)} unknown`),
+    );
+  },
+);
+
 After(async function (this: PremiseWorld) {
   if (this.projectDirectory) {
     await rm(this.projectDirectory, { force: true, recursive: true });
@@ -1235,8 +1283,13 @@ async function linkPremisePackage({
 }) {
   const nodeModulesDirectory = join(projectDirectory, "node_modules");
   const scopeDirectory = join(nodeModulesDirectory, "@stuplum");
+  const packagePath = join(scopeDirectory, "premise");
   await mkdir(scopeDirectory, { recursive: true });
-  await symlink(resolve("."), join(scopeDirectory, "premise"), "dir");
+  try {
+    await access(packagePath);
+  } catch {
+    await symlink(resolve("."), packagePath, "dir");
+  }
 }
 
 async function writeExecutableRequirement({

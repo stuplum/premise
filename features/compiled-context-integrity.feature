@@ -35,7 +35,7 @@ Feature: Refuse or expose unreliable compiled context
     When I run "premise test"
     Then the command succeeds
     Given the source for requirement "PAY-001" has been deleted
-    When I run "premise check"
+    When I run "premise context src/payment.ts"
     Then the command fails
     And the command reports that requirement source "features/PAY-001.feature" no longer exists
 
