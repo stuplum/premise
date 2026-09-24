@@ -1,6 +1,6 @@
 {
   "name": "@stuplum/premise",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Executable requirements and enforceable architecture decisions for software teams and coding agents.",
   "keywords": [
     "bdd",
