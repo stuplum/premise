@@ -8,14 +8,16 @@ Initial experimental release.
 - Evaluates executable premises through provider-neutral `established`,
   `failed`, and `unknown` results during `premise check`.
 - Evaluates named dependency-cruiser rules as architecture premises alongside
-  Cucumber behaviour and compiles their subject evidence into shared context.
+  Cucumber behaviour and exposes their subject evidence to shared context.
 - Resolves `Driven by premise` decision relationships through the generic
   provider registry; legacy `Driven by requirement` syntax remains compatible.
 - Separates provider evaluation from graph-derived knowledge state and
   propagates explained `reconsider` state through dependent decisions.
+- Projects artifact context as structured, current premise and decision
+  knowledge while retaining source references for deeper inspection.
 - Discovers implementation relationships from successful feature execution.
-- Stores compiled relationships as provider-neutral schema v2 premise evidence
-  without executable-validity fingerprints.
+- Projects artifact relationships from current provider evidence without
+  committed generated context indexes.
 - Removes `premise acknowledge`; executable premises are established only by
   provider evaluation.
 - Retrieves live requirement context for implementation files.

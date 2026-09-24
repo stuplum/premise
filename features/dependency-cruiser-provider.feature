@@ -10,14 +10,10 @@ Feature: Evaluate architecture premises through dependency-cruiser
     Then the command succeeds
     When I run "premise test"
     Then the command succeeds
-    And compiled context for "src/payment.ts" records these premises:
-      | id       | provider           |
-      | ARCH-003 | dependency-cruiser |
-      | PAY-001  | cucumber           |
     When I run "premise context src/payment.ts"
     Then the command succeeds
-    And the command returns the current Gherkin for requirement "PAY-001"
-    And the command returns architecture premise "ARCH-003"
+    And context reports premise "PAY-001" as "behaviour" in "gherkin" via "cucumber" with state "established"
+    And context reports premise "ARCH-003" as "architecture" in "dependency-cruiser" via "dependency-cruiser" with state "established"
 
   Scenario: Report a violated architecture premise
     Given an empty project

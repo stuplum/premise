@@ -1,4 +1,3 @@
-import { compilePremiseEvaluations } from "./compiled-context.js";
 import { evaluatePremises } from "./provider.js";
 import { createDefaultProviders } from "./providers/default-providers.js";
 
@@ -24,6 +23,5 @@ export async function runExecutableRequirements({
     return false;
   }
 
-  await compilePremiseEvaluations({ evaluations, projectDirectory });
   return true;
 }

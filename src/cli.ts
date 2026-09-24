@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
 import { runExecutableRequirements } from "./executable-requirements.js";
-import { readArtifactSources } from "./compiled-context.js";
+import { projectArtifactContext } from "./context-projection.js";
+import { renderArtifactContext } from "./context-renderer.js";
 import {
   findDecisionsRequiringReview,
   reviewDecision,
@@ -154,14 +155,20 @@ async function runContext({
     throw new Error("Usage: premise context <artifact>");
   }
 
-  const sources = await readArtifactSources({ artifact, projectDirectory });
-  if (sources.length === 0) {
-    process.stdout.write(`No compiled context for ${artifact}\n`);
+  const evaluations = await evaluatePremises({
+    projectDirectory,
+    providers: createDefaultProviders({ silentCucumber: true }),
+  });
+  const context = await projectArtifactContext({
+    artifact,
+    evaluations,
+    projectDirectory,
+  });
+  if (context.knowledge.length === 0) {
+    process.stdout.write(`No context for ${artifact}\n`);
     return;
   }
-  for (const source of sources) {
-    process.stdout.write(`${source.content.trim()}\n`);
-  }
+  process.stdout.write(renderArtifactContext(context));
 }
 
 async function runTests({ projectDirectory }: { projectDirectory: string }) {

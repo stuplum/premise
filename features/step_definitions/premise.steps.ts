@@ -13,7 +13,6 @@ import { dirname, join, resolve } from "node:path";
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import {
   After,
-  DataTable,
   Given,
   Then,
   When,
@@ -31,6 +30,10 @@ type PremiseConfiguration = {
 };
 
 class PremiseWorld {
+  contextProjection?: {
+    knowledge: Array<{ id: string; kind: string }>;
+  };
+  environment: Record<string, string> = {};
   projectDirectory = "";
   result?: SpawnSyncReturns<string>;
 
@@ -247,17 +250,11 @@ Given("the project knowledge is committed", function (this: PremiseWorld) {
   });
 });
 
-Given(
-  "the source for requirement {string} has been deleted",
-  async function (this: PremiseWorld, requirementId: string) {
-    await rm(join(this.projectDirectory, `features/${requirementId}.feature`));
-  },
-);
-
 When("I run {string}", function (this: PremiseWorld, command: string) {
   const [, ...arguments_] = splitCommand(command);
   this.result = runPremise({
     arguments: arguments_,
+    environment: this.environment,
     projectDirectory: this.projectDirectory,
   });
 });
@@ -290,9 +287,52 @@ When(
   },
 );
 
+When(
+  "I project context for {string} through the Premise API",
+  async function (this: PremiseWorld, artifact: string) {
+    const { createArtifactContextProjection } = await import(
+      "../../src/context-projection.js"
+    );
+    this.contextProjection = createArtifactContextProjection({
+      artifact,
+      decisions: [
+        {
+          drivers: [{ id: artifact, kind: "source" }],
+          id: "ORDER-004",
+          source: {
+            selector: "ORDER-004",
+            uri: "decisions/ORDER-004.decision",
+          },
+          state: { status: "established" },
+          title: "Persist order updates",
+        },
+      ],
+      evaluations: [],
+    });
+  },
+);
+
 Then("the command succeeds", function (this: PremiseWorld) {
   assert.equal(commandResult(this).status, 0, commandOutput(this));
 });
+
+Then(
+  "the projection identifies decision {string} as relevant",
+  function (this: PremiseWorld, decisionId: string) {
+    assert.deepEqual(this.contextProjection?.knowledge, [
+      {
+        description: "Persist order updates",
+        id: decisionId,
+        kind: "decision",
+        source: {
+          selector: decisionId,
+          uri: `decisions/${decisionId}.decision`,
+        },
+        state: { status: "established" },
+      },
+    ]);
+  },
+);
 
 Then("the command fails", function (this: PremiseWorld) {
   assert.notEqual(commandResult(this).status, 0);
@@ -644,6 +684,22 @@ Given(
       projectDirectory: this.projectDirectory,
       relativePath: "features/step_definitions/payment.steps.ts",
     });
+  },
+);
+
+Given(
+  "a parent Premise process selected TypeScript configuration {string}",
+  async function (this: PremiseWorld, configurationFile: string) {
+    const path = join(this.projectDirectory, configurationFile);
+    await writeJson(path, {
+      compilerOptions: {
+        module: "ESNext",
+        moduleResolution: "Bundler",
+        target: "ES2022",
+      },
+    });
+    this.environment.TSX_TSCONFIG_PATH = path;
+    this.environment.PREMISE_INJECTED_TSX_TSCONFIG_PATH = path;
   },
 );
 
@@ -1033,40 +1089,6 @@ Given(
   },
 );
 
-Given(
-  "malformed compiled context exists for {string}",
-  async function (this: PremiseWorld, artifactPath: string) {
-    await writeProjectFile({
-      content: JSON.stringify(
-        {
-          artifact: artifactPath,
-          premises: "not-an-array",
-          version: 2,
-        },
-        null,
-        2,
-      ),
-      projectDirectory: this.projectDirectory,
-      relativePath: `.premise/compiled/${artifactPath}.json`,
-    });
-  },
-);
-
-Given(
-  "legacy compiled context exists for {string}",
-  async function (this: PremiseWorld, artifactPath: string) {
-    await writeProjectFile({
-      content: `${JSON.stringify({
-        artifact: artifactPath,
-        requirements: [],
-        version: 1,
-      })}\n`,
-      projectDirectory: this.projectDirectory,
-      relativePath: `.premise/compiled/${artifactPath}.json`,
-    });
-  },
-);
-
 Then(
   "the command returns the current Gherkin for requirement {string}",
   async function (this: PremiseWorld, requirementId: string) {
@@ -1087,6 +1109,10 @@ Then(
 
 Then("no generated decision state is created", async function (this: PremiseWorld) {
   await assert.rejects(access(join(this.projectDirectory, ".premise/decisions")));
+});
+
+Then("no generated context files are created", async function (this: PremiseWorld) {
+  await assert.rejects(access(join(this.projectDirectory, ".premise/compiled")));
 });
 
 Then(
@@ -1212,11 +1238,11 @@ Then("the command reports invalid Premise configuration", function (this: Premis
 });
 
 Then(
-  "the command reports no compiled context for {string}",
+  "the command reports no context for {string}",
   function (this: PremiseWorld, artifactPath: string) {
     assert.match(
       commandOutput(this),
-      new RegExp(`No compiled context for ${artifactPath}`),
+      new RegExp(`No context for ${artifactPath}`),
     );
   },
 );
@@ -1262,7 +1288,7 @@ Then(
     assert.match(
       commandOutput(this),
       new RegExp(
-        `No requirement ID found in ${escapeRegex(source)}; no context was compiled\\.`,
+        `No requirement ID found in ${escapeRegex(source)}; artifact relationships cannot be discovered\\.`,
       ),
     );
   },
@@ -1291,92 +1317,6 @@ Then(
 );
 
 Then(
-  "the command reports invalid compiled context",
-  function (this: PremiseWorld) {
-    assert.match(commandOutput(this), /Invalid compiled context/);
-  },
-);
-
-Then(
-  "the command reports that premise source {string} no longer exists",
-  function (this: PremiseWorld, source: string) {
-    assert.match(
-      commandOutput(this),
-      new RegExp(
-        `Premise source ${escapeRegex(source)} no longer exists\\. Run premise test\\.`,
-      ),
-    );
-  },
-);
-
-Then(
-  "compiled context for {string} records premise {string} from provider {string}",
-  async function (
-    this: PremiseWorld,
-    artifactPath: string,
-    premiseId: string,
-    provider: string,
-  ) {
-    const context = JSON.parse(
-      await readFile(
-        join(this.projectDirectory, `.premise/compiled/${artifactPath}.json`),
-        "utf8",
-      ),
-    ) as {
-      premises: Array<{
-        assertion: { dialect: string };
-        evidence: Array<{ role?: string; uri: string }>;
-        fingerprint?: string;
-        id: string;
-        provider: string;
-      }>;
-      version: number;
-    };
-    assert.equal(context.version, 2);
-    assert.equal(context.premises.length, 1);
-    assert.deepEqual(
-      {
-        dialect: context.premises[0].assertion.dialect,
-        fingerprint: context.premises[0].fingerprint,
-        id: context.premises[0].id,
-        provider: context.premises[0].provider,
-      },
-      {
-        dialect: "gherkin",
-        fingerprint: undefined,
-        id: premiseId,
-        provider,
-      },
-    );
-    assert.ok(
-      context.premises[0].evidence.some(
-        ({ role, uri }) => role === "executed" && uri === artifactPath,
-      ),
-    );
-  },
-);
-
-Then(
-  "compiled context for {string} records these premises:",
-  async function (
-    this: PremiseWorld,
-    artifactPath: string,
-    table: DataTable,
-  ) {
-    const context = JSON.parse(
-      await readFile(
-        join(this.projectDirectory, `.premise/compiled/${artifactPath}.json`),
-        "utf8",
-      ),
-    ) as { premises: Array<{ id: string; provider: string }> };
-    assert.deepEqual(
-      context.premises.map(({ id, provider }) => ({ id, provider })),
-      table.hashes(),
-    );
-  },
-);
-
-Then(
   "the command returns architecture premise {string}",
   function (this: PremiseWorld, premiseId: string) {
     const output = commandOutput(this);
@@ -1385,21 +1325,59 @@ Then(
   },
 );
 
+Then(
+  "context reports premise {string} as {string} in {string} via {string} with state {string}",
+  function (
+    this: PremiseWorld,
+    premiseId: string,
+    premiseType: string,
+    dialect: string,
+    provider: string,
+    state: string,
+  ) {
+    const output = commandOutput(this);
+    assert.match(
+      output,
+      new RegExp(
+        `${escapeRegex(premiseId)}[\\s\\S]*${escapeRegex(premiseType)} / ${escapeRegex(dialect)} via ${escapeRegex(provider)}[\\s\\S]*${escapeRegex(state)}`,
+      ),
+    );
+  },
+);
+
+Then(
+  "context reports decision {string} with state {string}",
+  function (this: PremiseWorld, decisionId: string, state: string) {
+    assert.match(
+      commandOutput(this),
+      new RegExp(
+        `${escapeRegex(decisionId)}[\\s\\S]*decision[\\s\\S]*${escapeRegex(state)}`,
+      ),
+    );
+  },
+);
+
+Then(
+  "context retains source {string} with selector {string}",
+  function (this: PremiseWorld, source: string, selector: string) {
+    assert.match(
+      commandOutput(this),
+      new RegExp(
+        `source: ${escapeRegex(source)}#${escapeRegex(selector)}`,
+      ),
+    );
+  },
+);
+
+Then("context does not dump the Gherkin source", function (this: PremiseWorld) {
+  assert.doesNotMatch(commandOutput(this), /Scenario: Accept a valid payment/);
+});
+
 Then("the command reports the forbidden dependency", function (this: PremiseWorld) {
   const output = commandOutput(this);
   assert.match(output, /src\/payment\.ts/);
   assert.match(output, /src\/http-client\.ts/);
 });
-
-Then(
-  "the command reports that compiled context must be regenerated",
-  function (this: PremiseWorld) {
-    assert.match(
-      commandOutput(this),
-      /Compiled context version 1 is no longer supported.*Run premise test/,
-    );
-  },
-);
 
 Then("the executable requirement ran", async function (this: PremiseWorld) {
   assert.equal(
@@ -1513,14 +1491,17 @@ function runGit({
 
 function runPremise({
   arguments: arguments_,
+  environment = {},
   projectDirectory,
 }: {
   arguments: string[];
+  environment?: Record<string, string>;
   projectDirectory: string;
 }) {
   return spawnSync(process.execPath, [cliPath, ...arguments_], {
     cwd: projectDirectory,
     encoding: "utf8",
+    env: { ...process.env, ...environment },
   });
 }
 

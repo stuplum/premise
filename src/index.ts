@@ -1,8 +1,8 @@
 export { calculateFingerprint } from "./fingerprint.js";
 export {
-  compilePremiseEvaluations,
-  readArtifactContext,
-} from "./compiled-context.js";
+  createArtifactContextProjection,
+  projectArtifactContext,
+} from "./context-projection.js";
 export { parseDecision } from "./decision-parser.js";
 export { readConfiguration } from "./repository.js";
 export { runExecutableRequirements } from "./executable-requirements.js";
@@ -15,9 +15,12 @@ export type {
   ReconsiderationReason,
 } from "./knowledge-state.js";
 export type {
-  ArtifactContext,
-  CompiledPremise,
-} from "./compiled-context.js";
+  ArtifactContextProjection,
+  ContextEntry,
+  DecisionContextEntry,
+  DecisionContextInput,
+  PremiseContextEntry,
+} from "./context-projection.js";
 export type {
   DecisionAst,
   DecisionDriver,

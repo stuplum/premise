@@ -1,0 +1,6 @@
+Decision CTX-001 "Repository knowledge is projected, not generated"
+Driven by premise CTX-008
+Choose derive artifact context live from repository sources and provider evidence without committed artifact-context indexes
+Because generated shadow state duplicates authoritative knowledge, can become stale, and creates repository and token cruft
+Accept context queries may take longer because providers must rediscover and evaluate relevant evidence
+Accept providers must expose enough evidence to associate knowledge with repository artifacts

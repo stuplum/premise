@@ -52,6 +52,15 @@ export type DecisionRequiringReview = {
   reasons: ReconsiderationReason[];
 };
 
+export type DecisionEvaluation = {
+  decision: DecisionSource;
+  drivers: KnowledgeSource[];
+  state: Extract<
+    KnowledgeState,
+    { status: "established" } | { status: "reconsider" }
+  >;
+};
+
 export async function findDecisionsRequiringReview({
   evaluations,
   projectDirectory,
@@ -59,6 +68,26 @@ export async function findDecisionsRequiringReview({
   evaluations: PremiseEvaluation[];
   projectDirectory: string;
 }): Promise<DecisionRequiringReview[]> {
+  const results = await evaluateDecisions({ evaluations, projectDirectory });
+
+  return results
+    .flatMap(({ decision, drivers, state }) =>
+      state.status === "reconsider"
+        ? [{ decision, drivers, reasons: state.reasons }]
+        : [],
+    )
+    .sort((left, right) =>
+      left.decision.decision.id.localeCompare(right.decision.decision.id),
+    );
+}
+
+export async function evaluateDecisions({
+  evaluations,
+  projectDirectory,
+}: {
+  evaluations: PremiseEvaluation[];
+  projectDirectory: string;
+}): Promise<DecisionEvaluation[]> {
   const knowledge = await loadDecisionKnowledge({
     premises: evaluations.map(({ premise }) => premise),
     projectDirectory,
@@ -87,25 +116,10 @@ export async function findDecisionsRequiringReview({
     );
   }
 
-  return results
-    .flatMap(({ decision, drivers, state }) =>
-      state.status === "reconsider"
-        ? [{ decision, drivers, reasons: state.reasons }]
-        : [],
-    )
-    .sort((left, right) =>
-      left.decision.decision.id.localeCompare(right.decision.decision.id),
-    );
+  return results;
 }
 
-type DecisionKnowledgeState = {
-  decision: DecisionSource;
-  drivers: KnowledgeSource[];
-  state: Extract<
-    KnowledgeState,
-    { status: "established" } | { status: "reconsider" }
-  >;
-};
+type DecisionKnowledgeState = DecisionEvaluation;
 
 async function deriveDecisionState({
   decision,

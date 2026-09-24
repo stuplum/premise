@@ -8,6 +8,7 @@ import { requirementIds } from "../gherkin-requirements.js";
 import type {
   EvaluationContext,
   EvaluationResult,
+  Evidence,
   Premise,
   PremiseProvider,
 } from "../provider.js";
@@ -25,6 +26,8 @@ type CucumberProject = {
 
 const defaultFeaturePaths = ["features/**/*.feature"];
 const defaultStepPaths = ["features/step_definitions/**/*.ts"];
+const injectedTypeScriptConfigurationVariable =
+  "PREMISE_INJECTED_TSX_TSCONFIG_PATH";
 
 export function createCucumberProvider({
   allowEmpty = false,
@@ -188,16 +191,15 @@ async function evaluateCucumberPremise({
       silent: project.silent,
       typeScriptConfiguration: project.typeScriptConfiguration,
     });
-    if (exitCode !== 0) {
-      return failedEvaluation({
-        message: `Cucumber did not establish ${premise.id}`,
-        source,
-      });
-    }
-
     if (!premise.assertion.ref.selector) {
+      if (exitCode !== 0) {
+        return failedEvaluation({
+          message: `Cucumber did not establish ${premise.id}`,
+          source,
+        });
+      }
       process.stderr.write(
-        `No requirement ID found in ${source}; no context was compiled.\n`,
+        `No requirement ID found in ${source}; artifact relationships cannot be discovered.\n`,
       );
       return {
         evidence: [{ role: "assertion", uri: source }],
@@ -218,11 +220,20 @@ async function evaluateCucumberPremise({
       });
     }
 
+    const evidence: Evidence[] = [
+      { role: "assertion", uri: source },
+      ...artifacts.map((uri) => ({ role: "executed", uri })),
+    ];
+    if (exitCode !== 0) {
+      return failedEvaluation({
+        evidence,
+        message: `Cucumber did not establish ${premise.id}`,
+        source,
+      });
+    }
+
     return {
-      evidence: [
-        { role: "assertion", uri: source },
-        ...artifacts.map((uri) => ({ role: "executed", uri })),
-      ],
+      evidence,
       status: "established",
     };
   } finally {
@@ -234,15 +245,17 @@ async function evaluateCucumberPremise({
 }
 
 function failedEvaluation({
-  message,
   source,
+  evidence = [{ role: "assertion", uri: source }],
+  message,
 }: {
+  evidence?: Evidence[];
   message: string;
   source: string;
 }): EvaluationResult {
   return {
     diagnostics: [{ message, uri: source }],
-    evidence: [{ role: "assertion", uri: source }],
+    evidence,
     status: "failed",
   };
 }
@@ -274,13 +287,10 @@ async function runCucumberProcess({
       ["--import", tsxLoaderUrl, cucumberCliPath, ...arguments_],
       {
         cwd: projectDirectory,
-        env: {
-          ...process.env,
-          ...(typeScriptConfiguration
-            ? { TSX_TSCONFIG_PATH: typeScriptConfiguration }
-            : {}),
-          NODE_V8_COVERAGE: coverageDirectory,
-        },
+        env: cucumberEnvironment({
+          coverageDirectory,
+          typeScriptConfiguration,
+        }),
         stdio: silent ? "ignore" : "inherit",
       },
     );
@@ -294,6 +304,27 @@ async function runCucumberProcess({
       resolve(code ?? 1);
     });
   });
+}
+
+function cucumberEnvironment({
+  coverageDirectory,
+  typeScriptConfiguration,
+}: {
+  coverageDirectory: string;
+  typeScriptConfiguration?: string;
+}) {
+  const environment: NodeJS.ProcessEnv = {
+    ...process.env,
+    NODE_V8_COVERAGE: coverageDirectory,
+  };
+  delete environment.TSX_TSCONFIG_PATH;
+  delete environment[injectedTypeScriptConfigurationVariable];
+  if (typeScriptConfiguration) {
+    environment.TSX_TSCONFIG_PATH = typeScriptConfiguration;
+    environment[injectedTypeScriptConfigurationVariable] =
+      typeScriptConfiguration;
+  }
+  return environment;
 }
 
 function requireMatches({
@@ -331,7 +362,11 @@ async function findTypeScriptConfiguration({
 }: {
   projectDirectory: string;
 }) {
-  if (process.env.TSX_TSCONFIG_PATH) {
+  if (
+    process.env.TSX_TSCONFIG_PATH &&
+    process.env.TSX_TSCONFIG_PATH !==
+      process.env[injectedTypeScriptConfigurationVariable]
+  ) {
     return process.env.TSX_TSCONFIG_PATH;
   }
 

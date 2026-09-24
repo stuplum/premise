@@ -1,5 +1,5 @@
-Feature: Refuse or expose unreliable compiled context
-  Generated context must be trustworthy enough to guide implementation work.
+Feature: Keep live provider evidence reliable
+  Provider evidence must be trustworthy enough to guide implementation work.
 
   Scenario: Warn when execution uses a cache-busted module identity
     Given an empty project
@@ -22,30 +22,6 @@ Feature: Refuse or expose unreliable compiled context
     Then the command fails
     And the command reports that "features/payments.feature" must contain one requirement ID
 
-  Scenario: Reject malformed generated context
-    Given an empty project
-    And malformed compiled context exists for "src/payment.ts"
-    When I run "premise context src/payment.ts"
-    Then the command fails
-    And the command reports invalid compiled context
-
-  Scenario: Explain how to replace legacy generated context
-    Given an empty project
-    And legacy compiled context exists for "src/payment.ts"
-    When I run "premise context src/payment.ts"
-    Then the command fails
-    And the command reports that compiled context must be regenerated
-
-  Scenario: Explain when a compiled requirement source no longer exists
-    Given an empty project
-    And executable requirement "PAY-001" exercises "src/payment.ts"
-    When I run "premise test"
-    Then the command succeeds
-    Given the source for requirement "PAY-001" has been deleted
-    When I run "premise context src/payment.ts"
-    Then the command fails
-    And the command reports that premise source "features/PAY-001.feature" no longer exists
-
   Scenario: Ignore an application module that is imported but not exercised
     Given an empty project
     And an executable requirement imports "src/payment.ts" without exercising it
@@ -53,14 +29,16 @@ Feature: Refuse or expose unreliable compiled context
     Then the command succeeds
     When I run "premise context src/payment.ts"
     Then the command succeeds
-    And the command reports no compiled context for "src/payment.ts"
+    And the command reports no context for "src/payment.ts"
 
   Scenario: Ignore requirement-like text outside Gherkin tags
     Given an empty project
     And an executable requirement contains requirement-like comments and data
     When I run "premise test"
     Then the command succeeds
-    And compiled context for "src/payment.ts" records premise "PAY-001" from provider "cucumber"
+    When I run "premise context src/payment.ts"
+    Then the command succeeds
+    And context reports premise "PAY-001" as "behaviour" in "gherkin" via "cucumber" with state "established"
 
   Scenario: Ignore the consumer's parallel profile during coverage discovery
     Given an empty project
@@ -70,4 +48,4 @@ Feature: Refuse or expose unreliable compiled context
     And Premise uses one worker for both coverage runs
     When I run "premise context src/payment.ts"
     Then the command succeeds
-    And the command returns the current Gherkin for requirement "PAY-001"
+    And context reports premise "PAY-001" as "behaviour" in "gherkin" via "cucumber" with state "established"
