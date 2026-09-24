@@ -124,17 +124,24 @@ premise test
 ```
 
 For successful tagged features, Premise compares dry-run and real execution
-coverage and records the implementation functions exercised by the scenarios.
-The provider-neutral relationships live under `.premise/compiled/` and are
-committed. Each schema v2 entry records the premise identity, type, assertion,
-provider, and live evidence; it does not store validity fingerprints.
+coverage to identify the implementation functions exercised by the scenarios.
+That evidence stays in the current evaluation. Premise does not write or commit
+a generated artifact-to-premise index.
 
-An engineer or agent can then retrieve the current requirement relevant to an
-implementation file without loading the repository's entire documentation set:
+An engineer or agent can then retrieve the current repository knowledge
+relevant to an implementation file without loading the repository's entire
+documentation set:
 
 ```sh
 premise context src/payment.ts
 ```
+
+`context` is a projection over the knowledge graph rather than a source dump.
+It reports each relevant premise's stable ID, type, dialect, provider, current
+evaluation state, description, and source reference. It also includes reviewed
+decisions reached from those premises or driven directly by the artifact,
+including any reasons they now require reconsideration. Gherkin and other
+sources remain available through their reported URI and selector.
 
 `premise check` evaluates the current executable premises through their
 providers. A changed premise that still passes is established without an
@@ -186,7 +193,7 @@ Save the rule in a standard `.dependency-cruiser.js`, `.cjs`, `.mjs`, or
 `.json` configuration. `premise check` evaluates it alongside Gherkin premises
 in the same invocation. `premise test` also records each matching source module
 as evidence, so `premise context src/domain/order.ts` returns both behavioural
-and architecture sources relevant to that artifact.
+and architecture knowledge relevant to that artifact.
 
 The bundled CLI currently cruises `src`. Consumers of the public provider
 factory can supply different source paths.
@@ -223,12 +230,12 @@ Discovery paths can be overridden with `premise.json`:
 - `**/*.decision` — authoritative architecture decisions.
 - `.dependency-cruiser.{js,cjs,mjs,json}` — executable architecture premises.
 - `.premise/reviews/` — generated decision-review receipts.
-- `.premise/compiled/` — generated requirement-to-implementation relationships.
 - `premise.json` — optional discovery configuration.
 
-The generated artifacts are intentionally small and belong in version control.
-They allow verification to work in a clean CI checkout rather than relying on
-an agent's memory or local working-tree state.
+Review receipts are intentionally small and belong in version control. They
+record an explicit review event; they are not a generated copy of repository
+knowledge. Artifact context is projected live from authoritative sources and
+provider evidence.
 
 ## What the evidence says
 

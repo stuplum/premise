@@ -8,7 +8,14 @@ Feature: Fail clearly when executable requirement discovery is unreliable
     Then the command succeeds
     When I run "premise context src/payment.ts"
     Then the command succeeds
-    And the command returns the current Gherkin for requirement "PAY-001"
+    And context reports premise "PAY-001" as "behaviour" in "gherkin" via "cucumber" with state "established"
+
+  Scenario: Isolate a nested Premise run from its parent's TypeScript configuration
+    Given an empty project
+    And a parent Premise process selected TypeScript configuration "parent-tsconfig.json"
+    And an executable requirement uses aliases from "tsconfig.base.json"
+    When I run "premise test"
+    Then the command succeeds
 
   Scenario: Reject a test run when no executable requirements match
     Given an empty project
@@ -30,7 +37,7 @@ Feature: Fail clearly when executable requirement discovery is unreliable
     Then the command succeeds
     When I run "premise context apps/public/src/utils/payment.ts"
     Then the command succeeds
-    And the command returns the current Gherkin for requirement "PAY-001"
+    And context reports premise "PAY-001" as "behaviour" in "gherkin" via "cucumber" with state "established"
 
   Scenario: Report a step definition import failure
     Given an empty project

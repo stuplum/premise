@@ -134,7 +134,21 @@ the human judgement.
 Reconsideration reasons retain the causal knowledge ID, kind, and state. Direct
 and transitive reasons are sorted by kind, ID, and state so propagation and CLI
 output are deterministic. These states are runtime projections and are not
-persisted in review receipts or compiled context.
+persisted. Review receipts record explicit human judgement, not current state.
+
+## Artifact context projection
+
+`premise context` selects artifact relationships from current provider evidence
+and combines them with active decision relationships to produce a typed
+knowledge projection for one artifact. The projection exists in memory and is
+not written as a generated artifact-context index.
+
+Each premise entry retains its type, dialect, provider, description, evaluation
+state, and assertion reference. Relevant decisions include those driven by an
+indexed premise, by the artifact source itself, or transitively by another
+relevant decision. Decision entries retain their current review-derived state
+and reasons. Rendering this projection for the CLI is separate from creating
+it, so other consumers can use the structured representation directly.
 
 ## Current implementation boundary
 
@@ -154,12 +168,6 @@ does not treat a changed source fingerprint as proof that a premise failed.
 Decision review remains a separate human-judgement lifecycle backed by review
 receipts.
 
-Compiled context schema v2 persists provider-neutral premise relationships and
-evidence. It contains premise type, assertion dialect/reference, provider
-identity, and evidence URIs with optional roles/ranges. It contains no validity
-fingerprints. Schema v1 files fail with an instruction to regenerate them by
-running `premise test`.
-
 `premise acknowledge` has been removed because administrative acknowledgement
 cannot establish executable truth.
 
@@ -167,7 +175,7 @@ cannot establish executable truth.
 
 The dependency-cruiser integration exercises a different assertion syntax,
 execution model, and evidence shape without adding architecture branches to the
-core evaluator or compiled-context model. It revealed one Cucumber assumption:
+core evaluator or shared knowledge model. It revealed one Cucumber assumption:
 an empty discovery result had been treated as a Cucumber evaluation failure.
 Empty discovery is now valid for each optional provider, while `premise test`
 rejects an empty aggregate result after all providers have run.
@@ -180,5 +188,5 @@ provider registry.
 
 Untagged Gherkin features remain executable for compatibility. The Cucumber
 provider gives them an internal `cucumber:<uri>` identity so they can pass
-through the same evaluator, while the existing context compiler continues to
-exclude them from repository knowledge.
+through the same evaluator, while omitting artifact evidence so they remain
+outside repository knowledge until given a stable ID.

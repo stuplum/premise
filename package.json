@@ -52,6 +52,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "check:premise": "node dist/cli.js check",
     "prepare": "npm run build",
     "pretest": "pnpm build",
     "prepublishOnly": "pnpm verify",
@@ -59,7 +60,7 @@
     "test:acceptance": "node --import tsx ./node_modules/@cucumber/cucumber/bin/cucumber.js --import 'features/step_definitions/**/*.ts'",
     "test:unit": "node --import tsx --test test/*.test.ts",
     "typecheck": "tsc --noEmit",
-    "verify": "pnpm typecheck && pnpm test"
+    "verify": "pnpm typecheck && pnpm test && pnpm check:premise"
   },
   "dependencies": {
     "@cucumber/cucumber": "^12.2.0",

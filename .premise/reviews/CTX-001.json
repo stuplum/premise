@@ -1,0 +1,16 @@
+{
+  "decision": {
+    "fingerprint": "sha256:15734d5defc43c03edaa3458030df914da60c89b7912863e3eb177fd26e5027e",
+    "id": "CTX-001",
+    "uri": "decisions/CTX-001.decision"
+  },
+  "drivers": [
+    {
+      "fingerprint": "sha256:034dfc4c91ce177883e068aa61aec86c3abe2bc4d78c8702e84bfbaaf04419e5",
+      "id": "CTX-008",
+      "kind": "premise",
+      "uri": "features/self-host-context-projection.feature"
+    }
+  ],
+  "version": 1
+}
