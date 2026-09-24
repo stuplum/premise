@@ -946,12 +946,27 @@ Given(
       content: JSON.stringify(
         {
           artifact: artifactPath,
-          requirements: "not-an-array",
-          version: 1,
+          premises: "not-an-array",
+          version: 2,
         },
         null,
         2,
       ),
+      projectDirectory: this.projectDirectory,
+      relativePath: `.premise/compiled/${artifactPath}.json`,
+    });
+  },
+);
+
+Given(
+  "legacy compiled context exists for {string}",
+  async function (this: PremiseWorld, artifactPath: string) {
+    await writeProjectFile({
+      content: `${JSON.stringify({
+        artifact: artifactPath,
+        requirements: [],
+        version: 1,
+      })}\n`,
       projectDirectory: this.projectDirectory,
       relativePath: `.premise/compiled/${artifactPath}.json`,
     });
@@ -1015,7 +1030,7 @@ Then("no legacy Premise files are created", async function (this: PremiseWorld) 
 Then("the command reports only the supported commands", function (this: PremiseWorld) {
   assert.match(
     commandOutput(this),
-    /Usage: premise <test\|context\|check\|acknowledge\|review>/,
+    /Usage: premise <test\|context\|check\|review>/,
   );
 });
 
@@ -1110,33 +1125,70 @@ Then(
 );
 
 Then(
-  "the command reports that requirement source {string} no longer exists",
+  "the command reports that premise source {string} no longer exists",
   function (this: PremiseWorld, source: string) {
     assert.match(
       commandOutput(this),
       new RegExp(
-        `Requirement source ${escapeRegex(source)} no longer exists\\. Run premise test\\.`,
+        `Premise source ${escapeRegex(source)} no longer exists\\. Run premise test\\.`,
       ),
     );
   },
 );
 
 Then(
-  "compiled context for {string} contains only requirement {string}",
+  "compiled context for {string} records premise {string} from provider {string}",
   async function (
     this: PremiseWorld,
     artifactPath: string,
-    requirementId: string,
+    premiseId: string,
+    provider: string,
   ) {
     const context = JSON.parse(
       await readFile(
         join(this.projectDirectory, `.premise/compiled/${artifactPath}.json`),
         "utf8",
       ),
-    ) as { requirements: Array<{ id: string }> };
+    ) as {
+      premises: Array<{
+        assertion: { dialect: string };
+        evidence: Array<{ role?: string; uri: string }>;
+        fingerprint?: string;
+        id: string;
+        provider: string;
+      }>;
+      version: number;
+    };
+    assert.equal(context.version, 2);
+    assert.equal(context.premises.length, 1);
     assert.deepEqual(
-      context.requirements.map(({ id }) => id),
-      [requirementId],
+      {
+        dialect: context.premises[0].assertion.dialect,
+        fingerprint: context.premises[0].fingerprint,
+        id: context.premises[0].id,
+        provider: context.premises[0].provider,
+      },
+      {
+        dialect: "gherkin",
+        fingerprint: undefined,
+        id: premiseId,
+        provider,
+      },
+    );
+    assert.ok(
+      context.premises[0].evidence.some(
+        ({ role, uri }) => role === "executed" && uri === artifactPath,
+      ),
+    );
+  },
+);
+
+Then(
+  "the command reports that compiled context must be regenerated",
+  function (this: PremiseWorld) {
+    assert.match(
+      commandOutput(this),
+      /Compiled context version 1 is no longer supported.*Run premise test/,
     );
   },
 );

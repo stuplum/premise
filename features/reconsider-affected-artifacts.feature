@@ -36,6 +36,7 @@ Feature: Run executable requirements with minimal setup
       | command                                        |
       | premise init                                     |
       | premise add PAY-001 --source requirement.feature |
+      | premise acknowledge PAY-001                     |
 
   Scenario: Reject legacy manual relationship configuration
     Given a project with legacy manual relationship configuration

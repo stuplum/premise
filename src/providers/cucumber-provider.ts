@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { basename, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { glob } from "glob";
-import { collectExecutedArtifacts } from "../compiled-context.js";
 import { requirementIds } from "../gherkin-requirements.js";
 import type {
   EvaluationContext,
@@ -13,6 +12,7 @@ import type {
   PremiseProvider,
 } from "../provider.js";
 import { readConfiguration } from "../repository.js";
+import { collectExecutedArtifacts } from "./cucumber-coverage.js";
 
 type CucumberProject = {
   projectDirectory: string;
@@ -193,6 +193,16 @@ async function evaluateCucumberPremise({
         message: `Cucumber did not establish ${premise.id}`,
         source,
       });
+    }
+
+    if (!premise.assertion.ref.selector) {
+      process.stderr.write(
+        `No requirement ID found in ${source}; no context was compiled.\n`,
+      );
+      return {
+        evidence: [{ role: "assertion", uri: source }],
+        status: "established",
+      };
     }
 
     const { artifacts, unreliableModulePaths } = await collectExecutedArtifacts({

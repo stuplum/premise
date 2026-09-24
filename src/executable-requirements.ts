@@ -1,4 +1,4 @@
-import { compileFeatureExecutions } from "./compiled-context.js";
+import { compilePremiseEvaluations } from "./compiled-context.js";
 import { evaluatePremises } from "./provider.js";
 import { createCucumberProvider } from "./providers/cucumber-provider.js";
 
@@ -20,17 +20,6 @@ export async function runExecutableRequirements({
     return false;
   }
 
-  await compileFeatureExecutions({
-    executions: evaluations.map(({ premise, result }) => ({
-      artifacts:
-        result.status === "established"
-          ? (result.evidence ?? [])
-              .filter(({ role }) => role === "executed")
-              .map(({ uri }) => uri)
-          : [],
-      source: premise.assertion.ref.uri,
-    })),
-    projectDirectory,
-  });
+  await compilePremiseEvaluations({ evaluations, projectDirectory });
   return true;
 }
