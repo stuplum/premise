@@ -156,6 +156,21 @@ Given(
 );
 
 Given(
+  "decision {string} is driven by decision {string}",
+  async function (
+    this: PremiseWorld,
+    decisionId: string,
+    driverDecisionId: string,
+  ) {
+    await writeDecision({
+      decisionId,
+      driver: `decision ${driverDecisionId}`,
+      projectDirectory: this.projectDirectory,
+    });
+  },
+);
+
+Given(
   "decision {string} is driven by source {string}",
   async function (this: PremiseWorld, decisionId: string, source: string) {
     await writeDecision({
@@ -502,6 +517,18 @@ When(
     assert.ok(rule, `No architecture premise ${premiseId}`);
     rule.comment = `${rule.comment} without exceptions`;
     await writeJson(path, configuration);
+  },
+);
+
+When(
+  "the requirement step definitions are removed",
+  async function (this: PremiseWorld) {
+    await rm(
+      join(
+        this.projectDirectory,
+        "features/step_definitions/payment.steps.ts",
+      ),
+    );
   },
 );
 
@@ -1104,6 +1131,48 @@ Then(
       new RegExp(
         `Decision ${escapeRegex(decisionId)} .* references unknown premise ${escapeRegex(premiseId)}`,
       ),
+    );
+  },
+);
+
+Then(
+  "the command explains that supporting premise {string} failed",
+  function (this: PremiseWorld, premiseId: string) {
+    assert.match(
+      commandOutput(this),
+      new RegExp(`Supporting premise ${escapeRegex(premiseId)} failed\\.`),
+    );
+  },
+);
+
+Then(
+  "the command explains that supporting premise {string} is unknown",
+  function (this: PremiseWorld, premiseId: string) {
+    assert.match(
+      commandOutput(this),
+      new RegExp(`Supporting premise ${escapeRegex(premiseId)} is unknown\\.`),
+    );
+  },
+);
+
+Then(
+  "the command explains that supporting decision {string} requires reconsideration",
+  function (this: PremiseWorld, decisionId: string) {
+    assert.match(
+      commandOutput(this),
+      new RegExp(
+        `Supporting decision ${escapeRegex(decisionId)} requires reconsideration\\.`,
+      ),
+    );
+  },
+);
+
+Then(
+  "the command does not report decision {string} as failed",
+  function (this: PremiseWorld, decisionId: string) {
+    assert.doesNotMatch(
+      commandOutput(this),
+      new RegExp(`${escapeRegex(decisionId)} failed`),
     );
   },
 );

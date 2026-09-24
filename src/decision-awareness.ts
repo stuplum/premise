@@ -4,7 +4,16 @@ import { glob } from "glob";
 import type { DecisionAst, DecisionDriver } from "./decision-model.js";
 import { parseDecision } from "./decision-parser.js";
 import { calculateFingerprint } from "./fingerprint.js";
-import { discoverPremises } from "./provider.js";
+import {
+  discoverPremises,
+  type Premise,
+  type PremiseEvaluation,
+} from "./provider.js";
+import {
+  knowledgeStateFromEvaluation,
+  type KnowledgeState,
+  type ReconsiderationReason,
+} from "./knowledge-state.js";
 import { createDefaultProviders } from "./providers/default-providers.js";
 
 type KnowledgeSource = {
@@ -40,40 +49,203 @@ type DecisionReview = {
 export type DecisionRequiringReview = {
   decision: DecisionSource;
   drivers: KnowledgeSource[];
+  reasons: ReconsiderationReason[];
 };
 
 export async function findDecisionsRequiringReview({
+  evaluations,
   projectDirectory,
 }: {
+  evaluations: PremiseEvaluation[];
   projectDirectory: string;
 }): Promise<DecisionRequiringReview[]> {
-  const knowledge = await loadDecisionKnowledge({ projectDirectory });
+  const knowledge = await loadDecisionKnowledge({
+    premises: evaluations.map(({ premise }) => premise),
+    projectDirectory,
+  });
   const activeDecisions = findActiveDecisions(knowledge.decisions);
-  const results = await Promise.all(
-    activeDecisions.map(async (decision) => {
-      const drivers = await resolveDrivers({
+  const states = new Map<string, Promise<DecisionKnowledgeState>>();
+  const premiseStates = new Map(
+    evaluations.map((evaluation) => [
+      evaluation.premise.id,
+      knowledgeStateFromEvaluation(evaluation),
+    ]),
+  );
+  const results: DecisionKnowledgeState[] = [];
+  for (const decision of activeDecisions.sort((left, right) =>
+    left.decision.id.localeCompare(right.decision.id),
+  )) {
+    results.push(
+      await deriveDecisionState({
         decision,
         knowledge,
+        premiseStates,
         projectDirectory,
-      });
-      const review = await readReview({
-        decisionId: decision.decision.id,
-        projectDirectory,
-      });
-
-      if (reviewMatches({ decision, drivers, review })) {
-        return undefined;
-      }
-
-      return { decision, drivers };
-    }),
-  );
+        stack: [],
+        states,
+      }),
+    );
+  }
 
   return results
-    .filter((result): result is DecisionRequiringReview => Boolean(result))
+    .flatMap(({ decision, drivers, state }) =>
+      state.status === "reconsider"
+        ? [{ decision, drivers, reasons: state.reasons }]
+        : [],
+    )
     .sort((left, right) =>
       left.decision.decision.id.localeCompare(right.decision.decision.id),
     );
+}
+
+type DecisionKnowledgeState = {
+  decision: DecisionSource;
+  drivers: KnowledgeSource[];
+  state: Extract<
+    KnowledgeState,
+    { status: "established" } | { status: "reconsider" }
+  >;
+};
+
+async function deriveDecisionState({
+  decision,
+  knowledge,
+  premiseStates,
+  projectDirectory,
+  stack,
+  states,
+}: {
+  decision: DecisionSource;
+  knowledge: {
+    decisions: DecisionSource[];
+    premises: KnowledgeSource[];
+  };
+  premiseStates: Map<
+    string,
+    Exclude<KnowledgeState, { status: "reconsider" }>
+  >;
+  projectDirectory: string;
+  stack: string[];
+  states: Map<string, Promise<DecisionKnowledgeState>>;
+}): Promise<DecisionKnowledgeState> {
+  const decisionId = decision.decision.id;
+  if (stack.includes(decisionId)) {
+    throw new Error(`Decision driver cycle includes ${decisionId}`);
+  }
+  const existing = states.get(decisionId);
+  if (existing) {
+    return existing;
+  }
+
+  const state = deriveUncachedDecisionState({
+    decision,
+    knowledge,
+    premiseStates,
+    projectDirectory,
+    stack: [...stack, decisionId],
+    states,
+  });
+  states.set(decisionId, state);
+  return state;
+}
+
+async function deriveUncachedDecisionState({
+  decision,
+  knowledge,
+  premiseStates,
+  projectDirectory,
+  stack,
+  states,
+}: {
+  decision: DecisionSource;
+  knowledge: {
+    decisions: DecisionSource[];
+    premises: KnowledgeSource[];
+  };
+  premiseStates: Map<
+    string,
+    Exclude<KnowledgeState, { status: "reconsider" }>
+  >;
+  projectDirectory: string;
+  stack: string[];
+  states: Map<string, Promise<DecisionKnowledgeState>>;
+}): Promise<DecisionKnowledgeState> {
+  const drivers = await resolveDrivers({ decision, knowledge, projectDirectory });
+  const review = await readReview({
+    decisionId: decision.decision.id,
+    projectDirectory,
+  });
+  const reasons: ReconsiderationReason[] = [];
+
+  if (!reviewMatches({ decision, drivers, review })) {
+    reasons.push({
+      id: decision.decision.id,
+      kind: "review",
+      message: "Decision has not been reviewed against its current drivers.",
+      status: "stale",
+    });
+  }
+
+  for (const driver of decision.decision.drivers) {
+    if (driver.kind === "premise") {
+      const premiseState = premiseStates.get(driver.id);
+      if (premiseState?.status === "failed") {
+        reasons.push({
+          id: driver.id,
+          kind: "premise",
+          message: `Supporting premise ${driver.id} failed.`,
+          status: "failed",
+        });
+      }
+      if (premiseState?.status === "unknown") {
+        reasons.push({
+          id: driver.id,
+          kind: "premise",
+          message: `Supporting premise ${driver.id} is unknown.`,
+          status: "unknown",
+        });
+      }
+    }
+
+    if (driver.kind === "decision") {
+      const source = knowledge.decisions.find(
+        ({ decision: candidate }) => candidate.id === driver.id,
+      );
+      if (!source) {
+        continue;
+      }
+      const dependency = await deriveDecisionState({
+        decision: source,
+        knowledge,
+        premiseStates,
+        projectDirectory,
+        stack,
+        states,
+      });
+      if (dependency.state.status === "reconsider") {
+        reasons.push({
+          id: driver.id,
+          kind: "decision",
+          message: `Supporting decision ${driver.id} requires reconsideration.`,
+          status: "reconsider",
+        });
+      }
+    }
+  }
+
+  reasons.sort((left, right) =>
+    `${left.kind}:${left.id}:${left.status}`.localeCompare(
+      `${right.kind}:${right.id}:${right.status}`,
+    ),
+  );
+  return {
+    decision,
+    drivers,
+    state:
+      reasons.length === 0
+        ? { status: "established" }
+        : { reasons, status: "reconsider" },
+  };
 }
 
 export async function reviewDecision({
@@ -114,13 +286,18 @@ export async function reviewDecision({
 }
 
 async function loadDecisionKnowledge({
+  premises: premiseDefinitions,
   projectDirectory,
 }: {
+  premises?: Premise[];
   projectDirectory: string;
 }) {
   const [decisions, premises] = await Promise.all([
     discoverDecisions({ projectDirectory }),
-    discoverPremiseSources({ projectDirectory }),
+    discoverPremiseSources({
+      premises: premiseDefinitions,
+      projectDirectory,
+    }),
   ]);
   validateSupersessions(decisions);
   return { decisions, premises };
@@ -150,16 +327,22 @@ async function discoverDecisions({
 }
 
 async function discoverPremiseSources({
+  premises,
   projectDirectory,
 }: {
+  premises?: Premise[];
   projectDirectory: string;
 }): Promise<KnowledgeSource[]> {
-  const discoveries = await discoverPremises({
-    projectDirectory,
-    providers: createDefaultProviders({ silentCucumber: true }),
-  });
+  const discoveredPremises =
+    premises ??
+    (
+      await discoverPremises({
+        projectDirectory,
+        providers: createDefaultProviders({ silentCucumber: true }),
+      })
+    ).map(({ premise }) => premise);
   return Promise.all(
-    discoveries.map(async ({ premise }) => ({
+    discoveredPremises.map(async (premise) => ({
       content: await readFile(
         await resolveProjectSource({
           projectDirectory,

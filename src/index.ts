@@ -7,8 +7,13 @@ export { parseDecision } from "./decision-parser.js";
 export { readConfiguration } from "./repository.js";
 export { runExecutableRequirements } from "./executable-requirements.js";
 export { discoverPremises, evaluatePremises } from "./provider.js";
+export { knowledgeStateFromEvaluation } from "./knowledge-state.js";
 export { createCucumberProvider } from "./providers/cucumber-provider.js";
 export { createDependencyCruiserProvider } from "./providers/dependency-cruiser-provider.js";
+export type {
+  KnowledgeState,
+  ReconsiderationReason,
+} from "./knowledge-state.js";
 export type {
   ArtifactContext,
   CompiledPremise,

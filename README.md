@@ -145,6 +145,13 @@ the check fail:
 premise check
 ```
 
+Provider results and derived knowledge state are deliberately different. A
+provider can establish, fail, or be unable to evaluate a premise. When a
+premise is failed or unknown, a decision depending on it is reported as
+`reconsider`—not falsely reported as mechanically failed. Reconsideration also
+propagates through decisions that depend on other decisions, with the causal
+premise or decision included in the output.
+
 Decision review remains separate. A changed decision or decision driver still
 requires the explicit `premise review <decision-id>` judgement described above.
 

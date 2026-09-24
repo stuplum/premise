@@ -116,6 +116,26 @@ dialect. Legacy `Driven by requirement <id>` syntax is accepted at the parser
 boundary and immediately normalized to a premise relationship. Existing review
 receipts require a fresh review to migrate their stored driver kind.
 
+## Evaluation state and knowledge state
+
+Provider evaluation has exactly three outcomes:
+
+- `established` — the provider evaluated the assertion successfully;
+- `failed` — the provider evaluated the assertion and found it false; and
+- `unknown` — the provider could not obtain a trustworthy result.
+
+`reconsider` is not a provider result. It is derived by the Premise core when a
+decision is not reviewed against its current sources, depends on a failed or
+unknown premise, or depends on another decision requiring reconsideration. A
+current reviewed decision is `established` in the graph sense, which means it
+is presently trusted; it does not imply that a provider mechanically evaluated
+the human judgement.
+
+Reconsideration reasons retain the causal knowledge ID, kind, and state. Direct
+and transitive reasons are sorted by kind, ID, and state so propagation and CLI
+output are deterministic. These states are runtime projections and are not
+persisted in review receipts or compiled context.
+
 ## Current implementation boundary
 
 The current package implements:
