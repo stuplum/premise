@@ -46,22 +46,32 @@ the core to interpret dialect-specific selectors. A Gherkin provider may treat
 `@ORDER-007` as a tag, while an OpenAPI provider may treat a selector as a JSON
 Pointer.
 
-## Candidate provider API
+## Provider API
 
 ```ts
 export interface PremiseProvider {
+  readonly id: string;
   readonly dialects: readonly string[];
 
+  discover(context: EvaluationContext): Promise<readonly Premise[]>;
+
   evaluate(
-    assertion: Assertion,
+    premise: Premise,
     context: EvaluationContext,
   ): Promise<EvaluationResult>;
 }
 
 export interface EvaluationContext {
-  root: string;
+  projectDirectory: string;
 }
 ```
+
+Discovery belongs to the provider in the current model. Native tools already
+have different ways to identify their assertions, and forcing them through a
+central manifest before a second provider exists would merely move
+provider-specific assumptions into the core. The core validates provider IDs,
+supported dialects, and globally unique premise IDs before asking providers to
+evaluate their discoveries.
 
 Providers translate their native output into a small common result:
 
@@ -103,10 +113,19 @@ fail status merely to fit them into the provider model.
 
 The current package implements:
 
-- executable Gherkin through bundled Cucumber support;
+- a provider-neutral discovery, evaluation, result, and evidence boundary;
+- executable Gherkin through a bundled Cucumber provider;
 - requirement-to-implementation context discovery;
 - the `.decision` language and parser;
 - decision-driver resolution and supersession validation; and
 - committed review receipts enforced by `premise check`.
 
-The generic provider API and additional dialect providers remain design work.
+Compiled context and `premise check` still use the earlier
+requirement/fingerprint lifecycle. They are intentionally not presented as part
+of the provider abstraction yet. A genuinely different second provider remains
+the test of whether the implemented boundary is sufficiently generic.
+
+Untagged Gherkin features remain executable for compatibility. The Cucumber
+provider gives them an internal `cucumber:<uri>` identity so they can pass
+through the same evaluator, while the existing context compiler continues to
+exclude them from repository knowledge.

@@ -2,6 +2,8 @@ export { calculateFingerprint } from "./fingerprint.js";
 export { parseDecision } from "./decision-parser.js";
 export { readConfiguration } from "./repository.js";
 export { runExecutableRequirements } from "./executable-requirements.js";
+export { evaluatePremises } from "./provider.js";
+export { createCucumberProvider } from "./providers/cucumber-provider.js";
 export type {
   DecisionAst,
   DecisionDriver,
@@ -10,6 +12,19 @@ export type {
   ParsedDecision,
   SourceLocation,
 } from "./decision-model.js";
+export type {
+  AssertionReference,
+  Diagnostic,
+  EvaluationContext,
+  EvaluationResult,
+  Evidence,
+  Premise,
+  PremiseAssertion,
+  PremiseEvaluation,
+  PremiseProvider,
+  SourcePosition,
+  SourceRange,
+} from "./provider.js";
 export type {
   ChangedRequirement,
   CucumberConfiguration,
