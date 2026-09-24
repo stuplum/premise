@@ -53,12 +53,12 @@ export interface PremiseProvider {
   readonly id: string;
   readonly dialects: readonly string[];
 
-  discover(context: EvaluationContext): Promise<readonly Premise[]>;
+  prepare(context: EvaluationContext): Promise<PremiseProviderSession>;
+}
 
-  evaluate(
-    premise: Premise,
-    context: EvaluationContext,
-  ): Promise<EvaluationResult>;
+export interface PremiseProviderSession {
+  discover(): Promise<readonly Premise[]>;
+  evaluate(premise: Premise): Promise<EvaluationResult>;
 }
 
 export interface EvaluationContext {
@@ -66,12 +66,13 @@ export interface EvaluationContext {
 }
 ```
 
-Discovery belongs to the provider in the current model. Native tools already
-have different ways to identify their assertions, and forcing them through a
-central manifest before a second provider exists would merely move
-provider-specific assumptions into the core. The core validates provider IDs,
-supported dialects, and globally unique premise IDs before asking providers to
-evaluate their discoveries.
+Discovery belongs to a prepared provider session in the current model. Native
+tools already have different ways to identify their assertions, and forcing
+them through a central manifest would merely move provider-specific assumptions
+into the core. A provider definition is reusable configuration; preparing it
+creates a project-scoped session that owns discovery state and cached analysis.
+The core validates provider IDs, supported dialects, and globally unique premise
+IDs before asking those same sessions to evaluate their discoveries.
 
 Providers translate their native output into a small common result:
 

@@ -40,6 +40,7 @@ export type {
   PremiseAssertion,
   PremiseEvaluation,
   PremiseProvider,
+  PremiseProviderSession,
   SourcePosition,
   SourceRange,
 } from "./provider.js";
