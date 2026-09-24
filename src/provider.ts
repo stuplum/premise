@@ -62,15 +62,20 @@ export type PremiseEvaluation = {
   result: EvaluationResult;
 };
 
-export async function evaluatePremises({
+export type DiscoveredPremise = {
+  premise: Premise;
+  provider: PremiseProvider;
+};
+
+export async function discoverPremises({
   projectDirectory,
   providers,
 }: {
   projectDirectory: string;
   providers: readonly PremiseProvider[];
-}): Promise<PremiseEvaluation[]> {
+}): Promise<DiscoveredPremise[]> {
   requireUniqueProviders(providers);
-  const discoveries = [];
+  const discoveries: DiscoveredPremise[] = [];
   const premiseProviders = new Map<string, string>();
 
   for (const provider of providers) {
@@ -78,20 +83,30 @@ export async function evaluatePremises({
     for (const premise of premises) {
       requireSupportedDialect({ premise, provider });
       requireUniquePremise({ premise, premiseProviders, provider });
+      discoveries.push({ premise, provider });
     }
-    discoveries.push({ premises, provider });
   }
+
+  return discoveries;
+}
+
+export async function evaluatePremises({
+  projectDirectory,
+  providers,
+}: {
+  projectDirectory: string;
+  providers: readonly PremiseProvider[];
+}): Promise<PremiseEvaluation[]> {
+  const discoveries = await discoverPremises({ projectDirectory, providers });
 
   const evaluations: PremiseEvaluation[] = [];
 
-  for (const { premises, provider } of discoveries) {
-    for (const premise of premises) {
-      evaluations.push({
-        premise,
-        provider: provider.id,
-        result: await provider.evaluate(premise, { projectDirectory }),
-      });
-    }
+  for (const { premise, provider } of discoveries) {
+    evaluations.push({
+      premise,
+      provider: provider.id,
+      result: await provider.evaluate(premise, { projectDirectory }),
+    });
   }
 
   return evaluations;

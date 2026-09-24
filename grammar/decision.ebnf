@@ -19,3 +19,4 @@ whitespace-character = ? space or tab ? ;
 
 (* Blank lines are ignored. Leading and trailing whitespace on each line is ignored. *)
 (* Keywords are case-sensitive. Each production occupies one non-blank line. *)
+(* "requirement" is accepted as compatibility syntax and normalizes to "premise". *)

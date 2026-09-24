@@ -109,6 +109,13 @@ Decisions can depend on premises and other decisions, and their review lifecycle
 can be mechanically enforced. Premise should not assign them a synthetic pass or
 fail status merely to fit them into the provider model.
 
+Decision drivers use `Driven by premise <id>` and resolve through the same
+validated provider registry as evaluation. The decision model therefore does
+not know whether a premise is Gherkin, a dependency constraint, or another
+dialect. Legacy `Driven by requirement <id>` syntax is accepted at the parser
+boundary and immediately normalized to a premise relationship. Existing review
+receipts require a fresh review to migrate their stored driver kind.
+
 ## Current implementation boundary
 
 The current package implements:
@@ -116,6 +123,7 @@ The current package implements:
 - a provider-neutral discovery, evaluation, result, and evidence boundary;
 - executable Gherkin through a bundled Cucumber provider;
 - forbidden dependency rules through a bundled dependency-cruiser provider;
+- provider-neutral premise drivers for architecture decisions;
 - requirement-to-implementation context discovery;
 - the `.decision` language and parser;
 - decision-driver resolution and supersession validation; and
