@@ -65,6 +65,7 @@
     "@cucumber/cucumber": "^12.2.0",
     "@cucumber/gherkin": "^38.0.0",
     "@cucumber/messages": "^32.3.1",
+    "dependency-cruiser": "16.10.4",
     "glob": "^13.0.6",
     "tsx": "^4.20.0"
   },

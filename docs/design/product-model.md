@@ -115,6 +115,7 @@ The current package implements:
 
 - a provider-neutral discovery, evaluation, result, and evidence boundary;
 - executable Gherkin through a bundled Cucumber provider;
+- forbidden dependency rules through a bundled dependency-cruiser provider;
 - requirement-to-implementation context discovery;
 - the `.decision` language and parser;
 - decision-driver resolution and supersession validation; and
@@ -132,8 +133,22 @@ fingerprints. Schema v1 files fail with an instruction to regenerate them by
 running `premise test`.
 
 `premise acknowledge` has been removed because administrative acknowledgement
-cannot establish executable truth. A genuinely different second provider
-remains the test of whether the implemented boundary is sufficiently generic.
+cannot establish executable truth.
+
+## What the second provider exposed
+
+The dependency-cruiser integration exercises a different assertion syntax,
+execution model, and evidence shape without adding architecture branches to the
+core evaluator or compiled-context model. It revealed one Cucumber assumption:
+an empty discovery result had been treated as a Cucumber evaluation failure.
+Empty discovery is now valid for each optional provider, while `premise test`
+rejects an empty aggregate result after all providers have run.
+
+The same evidence model represents Cucumber execution with the `executed` role
+and dependency-cruiser scope with the `subject` role. Provider-specific rule
+selection, dependency diagnostics, and source matching remain inside the
+dependency-cruiser adapter. The only shared wiring change is the default
+provider registry.
 
 Untagged Gherkin features remain executable for compatibility. The Cucumber
 provider gives them an internal `cucumber:<uri>` identity so they can pass

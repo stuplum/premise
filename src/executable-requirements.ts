@@ -1,6 +1,6 @@
 import { compilePremiseEvaluations } from "./compiled-context.js";
 import { evaluatePremises } from "./provider.js";
-import { createCucumberProvider } from "./providers/cucumber-provider.js";
+import { createDefaultProviders } from "./providers/default-providers.js";
 
 export async function runExecutableRequirements({
   projectDirectory,
@@ -9,8 +9,12 @@ export async function runExecutableRequirements({
 }) {
   const evaluations = await evaluatePremises({
     projectDirectory,
-    providers: [createCucumberProvider()],
+    providers: createDefaultProviders(),
   });
+  if (evaluations.length === 0) {
+    process.stderr.write("No executable requirements matched\n");
+    return false;
+  }
   for (const { result } of evaluations) {
     if (result.status === "unknown") {
       process.stderr.write(`${result.reason}\n`);
