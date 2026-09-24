@@ -44,7 +44,7 @@ Architecture decisions are human-authored `.decision` files:
 
 ```text
 Decision ORDER-002 "Durable confirmation delivery"
-Driven by requirement ORDER-006
+Driven by premise ORDER-006
 Choose durable storage of pending confirmations
 Because accepted orders must survive delivery outages
 Accept possible duplicate delivery
@@ -55,14 +55,20 @@ The language has a distributable grammar and a source-located AST. Premise
 validates decision identity, structure, drivers, and single acyclic supersession
 history.
 
-A decision may be driven by tagged Gherkin, another decision, or any ordinary
-repository file:
+A decision may be driven by any discovered premise, another decision, or any
+ordinary repository file:
 
 ```text
-Driven by requirement ORDER-006
+Driven by premise ORDER-006
+Driven by premise ARCH-003
 Driven by decision OPS-002
 Driven by source requirements/order-confirmation.md
 ```
+
+Premise identity is independent of provider and dialect. `Driven by requirement`
+remains accepted as compatibility syntax, but the parser normalizes it to
+`premise`. Existing review receipts using the old driver kind require one fresh
+review so their stored relationship becomes provider-neutral.
 
 After reviewing an active decision against its current drivers, record that
 review:

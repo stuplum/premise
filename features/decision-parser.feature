@@ -29,9 +29,9 @@ Feature: Parse architecture decisions
     And the decision starts at line 1 column 1
     And the choice starts at line 6 column 1
     And its drivers are:
-      | kind        | id        |
-      | requirement | ORDER-006 |
-      | decision    | OPS-002   |
+      | kind     | id        |
+      | premise  | ORDER-006 |
+      | decision | OPS-002   |
     And its accepted costs are:
       | possible duplicate delivery     |
       | additional operational storage  |

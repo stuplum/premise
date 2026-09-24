@@ -9,6 +9,8 @@ Initial experimental release.
   `failed`, and `unknown` results during `premise check`.
 - Evaluates named dependency-cruiser rules as architecture premises alongside
   Cucumber behaviour and compiles their subject evidence into shared context.
+- Resolves `Driven by premise` decision relationships through the generic
+  provider registry; legacy `Driven by requirement` syntax remains compatible.
 - Discovers implementation relationships from successful feature execution.
 - Stores compiled relationships as provider-neutral schema v2 premise evidence
   without executable-validity fingerprints.
@@ -17,7 +19,7 @@ Initial experimental release.
 - Retrieves live requirement context for implementation files.
 - Provides a standalone architecture-decision language with a distributable
   grammar and source-located AST.
-- Resolves decision drivers to tagged Gherkin, other decisions, or ordinary
+- Resolves decision drivers to generic premises, other decisions, or ordinary
   repository files.
 - Records compact per-decision review receipts for local verification and CI.
 - Rejects unreviewed or stale active decisions and returns their live sources.

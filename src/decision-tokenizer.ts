@@ -64,7 +64,7 @@ function tokenizeStatement({
   if (driver) {
     return {
       id: driver[2],
-      kind: driver[1],
+      kind: driver[1] === "requirement" ? "premise" : driver[1],
       location,
       type: "Driver",
     };

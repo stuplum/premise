@@ -141,6 +141,21 @@ Given(
 );
 
 Given(
+  "decision {string} is driven by premise {string}",
+  async function (
+    this: PremiseWorld,
+    decisionId: string,
+    premiseId: string,
+  ) {
+    await writeDecision({
+      decisionId,
+      driver: `premise ${premiseId}`,
+      projectDirectory: this.projectDirectory,
+    });
+  },
+);
+
+Given(
   "decision {string} is driven by source {string}",
   async function (this: PremiseWorld, decisionId: string, source: string) {
     await writeDecision({
@@ -302,22 +317,6 @@ Then(
     const output = commandOutput(this);
     assert.match(output, new RegExp(`premise review ${escapeRegex(decisionId)}`));
     assert.match(output, /Supersedes/);
-  },
-);
-
-Then(
-  "the command reports that decision {string} references unknown requirement {string}",
-  function (
-    this: PremiseWorld,
-    decisionId: string,
-    requirementId: string,
-  ) {
-    assert.match(
-      commandOutput(this),
-      new RegExp(
-        `Decision ${escapeRegex(decisionId)} .* references unknown requirement ${escapeRegex(requirementId)}`,
-      ),
-    );
   },
 );
 
@@ -489,6 +488,20 @@ Given(
       projectDirectory: this.projectDirectory,
       relativePath: "src/payment.ts",
     });
+  },
+);
+
+When(
+  "architecture premise {string} changes",
+  async function (this: PremiseWorld, premiseId: string) {
+    const path = join(this.projectDirectory, ".dependency-cruiser.json");
+    const configuration = JSON.parse(await readFile(path, "utf8")) as {
+      forbidden: Array<{ comment: string; name: string }>;
+    };
+    const rule = configuration.forbidden.find(({ name }) => name === premiseId);
+    assert.ok(rule, `No architecture premise ${premiseId}`);
+    rule.comment = `${rule.comment} without exceptions`;
+    await writeJson(path, configuration);
   },
 );
 
@@ -1054,6 +1067,43 @@ Then(
   async function (this: PremiseWorld, decisionId: string) {
     await access(
       join(this.projectDirectory, `.premise/reviews/${decisionId}.json`),
+    );
+  },
+);
+
+Then(
+  "the review receipt for decision {string} records premise {string}",
+  async function (
+    this: PremiseWorld,
+    decisionId: string,
+    premiseId: string,
+  ) {
+    const receipt = JSON.parse(
+      await readFile(
+        join(this.projectDirectory, `.premise/reviews/${decisionId}.json`),
+        "utf8",
+      ),
+    ) as { drivers: Array<{ id: string; kind: string }> };
+    assert.ok(
+      receipt.drivers.some(
+        ({ id, kind }) => id === premiseId && kind === "premise",
+      ),
+    );
+  },
+);
+
+Then(
+  "the command reports that decision {string} references unknown premise {string}",
+  function (
+    this: PremiseWorld,
+    decisionId: string,
+    premiseId: string,
+  ) {
+    assert.match(
+      commandOutput(this),
+      new RegExp(
+        `Decision ${escapeRegex(decisionId)} .* references unknown premise ${escapeRegex(premiseId)}`,
+      ),
     );
   },
 );

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  discoverPremises,
   evaluatePremises,
   type Premise,
   type PremiseProvider,
@@ -39,6 +40,28 @@ test("evaluations retain independent premise, dialect, and provider identities",
       status: "established",
     },
   });
+});
+
+test("premise discovery validates identities without evaluating assertions", async () => {
+  let evaluated = false;
+  const provider = createProvider({
+    dialects: ["gherkin"],
+    id: "cucumber",
+    onEvaluate: () => {
+      evaluated = true;
+    },
+    premises: [behaviourPremise],
+  });
+
+  const discoveries = await discoverPremises({
+    projectDirectory: "/project",
+    providers: [provider],
+  });
+
+  assert.equal(evaluated, false);
+  assert.deepEqual(discoveries, [
+    { premise: behaviourPremise, provider },
+  ]);
 });
 
 test("a provider cannot return a premise in a dialect it does not support", async () => {
@@ -81,10 +104,12 @@ test("premise identities must be unique across providers", async () => {
 function createProvider({
   dialects,
   id,
+  onEvaluate,
   premises,
 }: {
   dialects: string[];
   id: string;
+  onEvaluate?: () => void;
   premises: Premise[];
 }): PremiseProvider {
   return {
@@ -94,6 +119,7 @@ function createProvider({
       return premises;
     },
     async evaluate(premise) {
+      onEvaluate?.();
       return {
         evidence: [{ role: "assertion", uri: premise.assertion.ref.uri }],
         status: "established",

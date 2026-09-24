@@ -25,9 +25,9 @@ Feature: Reconsider decisions driven by changed requirements
     Then the command succeeds
     And the command produces no output
 
-  Scenario: Reject a decision whose requirement cannot be resolved
+  Scenario: Reject a decision whose compatibility requirement cannot be resolved
     Given an empty project
     And decision "PAY-003" is driven by requirement "ORDER-006"
     When I run "premise check"
     Then the command fails
-    And the command reports that decision "PAY-003" references unknown requirement "ORDER-006"
+    And the command reports that decision "PAY-003" references unknown premise "ORDER-006"

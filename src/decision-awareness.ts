@@ -4,8 +4,8 @@ import { glob } from "glob";
 import type { DecisionAst, DecisionDriver } from "./decision-model.js";
 import { parseDecision } from "./decision-parser.js";
 import { calculateFingerprint } from "./fingerprint.js";
-import { requirementIds } from "./gherkin-requirements.js";
-import { readConfiguration } from "./repository.js";
+import { discoverPremises } from "./provider.js";
+import { createDefaultProviders } from "./providers/default-providers.js";
 
 type KnowledgeSource = {
   content: string;
@@ -41,8 +41,6 @@ export type DecisionRequiringReview = {
   decision: DecisionSource;
   drivers: KnowledgeSource[];
 };
-
-const defaultFeaturePaths = ["features/**/*.feature"];
 
 export async function findDecisionsRequiringReview({
   projectDirectory,
@@ -120,12 +118,12 @@ async function loadDecisionKnowledge({
 }: {
   projectDirectory: string;
 }) {
-  const [decisions, requirements] = await Promise.all([
+  const [decisions, premises] = await Promise.all([
     discoverDecisions({ projectDirectory }),
-    discoverRequirements({ projectDirectory }),
+    discoverPremiseSources({ projectDirectory }),
   ]);
   validateSupersessions(decisions);
-  return { decisions, requirements };
+  return { decisions, premises };
 }
 
 async function discoverDecisions({
@@ -151,28 +149,29 @@ async function discoverDecisions({
   return decisions;
 }
 
-async function discoverRequirements({
+async function discoverPremiseSources({
   projectDirectory,
 }: {
   projectDirectory: string;
 }): Promise<KnowledgeSource[]> {
-  const configuration = await readConfiguration({ projectDirectory });
-  const patterns = configuration.cucumber?.features ?? defaultFeaturePaths;
-  const uris = await glob(patterns, { cwd: projectDirectory, nodir: true });
-  const sources = await Promise.all(
-    uris.sort().map(async (uri) => {
-      const content = await readFile(join(projectDirectory, uri), "utf8");
-      return { content, ids: requirementIds({ content, uri }), uri };
-    }),
-  );
-  const requirements = sources.flatMap(({ content, ids, uri }) =>
-    ids.map((id) => ({ content, id, kind: "requirement", uri })),
-  );
-  requireUniqueIds({
-    entries: requirements.map(({ id, uri }) => ({ id, uri })),
-    kind: "requirement",
+  const discoveries = await discoverPremises({
+    projectDirectory,
+    providers: createDefaultProviders({ silentCucumber: true }),
   });
-  return requirements;
+  return Promise.all(
+    discoveries.map(async ({ premise }) => ({
+      content: await readFile(
+        await resolveProjectSource({
+          projectDirectory,
+          source: premise.assertion.ref.uri,
+        }),
+        "utf8",
+      ),
+      id: premise.id,
+      kind: "premise",
+      uri: premise.assertion.ref.uri,
+    })),
+  );
 }
 
 async function resolveDrivers({
@@ -183,7 +182,7 @@ async function resolveDrivers({
   decision: DecisionSource;
   knowledge: {
     decisions: DecisionSource[];
-    requirements: KnowledgeSource[];
+    premises: KnowledgeSource[];
   };
   projectDirectory: string;
 }): Promise<KnowledgeSource[]> {
@@ -192,9 +191,9 @@ async function resolveDrivers({
       try {
         return await resolveDriver({ driver, knowledge, projectDirectory });
       } catch (error) {
-        if (driver.kind === "requirement" && isUnknownReference(error)) {
+        if (driver.kind === "premise" && isUnknownReference(error)) {
           throw new Error(
-            `Decision ${decision.decision.id} in ${decision.uri} references unknown requirement ${driver.id}`,
+            `Decision ${decision.decision.id} in ${decision.uri} references unknown premise ${driver.id}`,
           );
         }
         throw error;
@@ -211,16 +210,16 @@ async function resolveDriver({
   driver: DecisionDriver;
   knowledge: {
     decisions: DecisionSource[];
-    requirements: KnowledgeSource[];
+    premises: KnowledgeSource[];
   };
   projectDirectory: string;
 }): Promise<KnowledgeSource> {
-  if (driver.kind === "requirement") {
-    const requirement = knowledge.requirements.find(({ id }) => id === driver.id);
-    if (!requirement) {
-      throw new Error(`Unknown requirement ${driver.id}`);
+  if (driver.kind === "premise") {
+    const premise = knowledge.premises.find(({ id }) => id === driver.id);
+    if (!premise) {
+      throw new Error(`Unknown premise ${driver.id}`);
     }
-    return requirement;
+    return premise;
   }
 
   if (driver.kind === "decision") {
