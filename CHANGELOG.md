@@ -5,6 +5,8 @@
 Initial experimental release.
 
 - Runs executable Gherkin through bundled Cucumber support.
+- Evaluates executable premises through provider-neutral `established`,
+  `failed`, and `unknown` results during `premise check`.
 - Discovers implementation relationships from successful feature execution.
 - Retrieves live requirement context for implementation files.
 - Provides a standalone architecture-decision language with a distributable

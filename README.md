@@ -128,13 +128,17 @@ implementation file without loading the repository's entire documentation set:
 premise context src/payment.ts
 ```
 
-If executable Gherkin changes, `premise check` reports the implementation it
-previously exercised. After reconsidering those files, acknowledge the current
-requirement version:
+`premise check` evaluates the current executable premises through their
+providers. A changed premise that still passes is established without an
+administrative acknowledgement; one that fails or cannot be evaluated makes
+the check fail:
 
 ```sh
-premise acknowledge PAY-001
+premise check
 ```
+
+Decision review remains separate. A changed decision or decision driver still
+requires the explicit `premise review <decision-id>` judgement described above.
 
 Gherkin integration currently treats one feature file as one requirement
 boundary. A feature may contain one stable requirement ID. Multiple IDs are

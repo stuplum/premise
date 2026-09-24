@@ -3,7 +3,6 @@
 import { runExecutableRequirements } from "./executable-requirements.js";
 import {
   acknowledgeCompiledRequirement,
-  findChangedCompiledRequirements,
   readArtifactGherkin,
 } from "./compiled-context.js";
 import {
@@ -11,6 +10,8 @@ import {
   reviewDecision,
   type DecisionRequiringReview,
 } from "./decision-awareness.js";
+import { evaluatePremises, type PremiseEvaluation } from "./provider.js";
+import { createCucumberProvider } from "./providers/cucumber-provider.js";
 
 try {
   await run({ arguments: process.argv.slice(2), projectDirectory: process.cwd() });
@@ -52,26 +53,55 @@ async function run({
 }
 
 async function runCheck({ projectDirectory }: { projectDirectory: string }) {
-  const [changes, affectedDecisions] = await Promise.all([
-    findChangedCompiledRequirements({ projectDirectory }),
+  const [evaluations, affectedDecisions] = await Promise.all([
+    evaluatePremises({
+      projectDirectory,
+      providers: [createCucumberProvider({ allowEmpty: true, silent: true })],
+    }),
     findDecisionsRequiringReview({ projectDirectory }),
   ]);
 
-  for (const change of changes) {
-    process.stdout.write(
-      `${change.id} changed.\nReconsider:\n${change.affects
-        .map((path) => `- ${path}`)
-        .join("\n")}\n`,
-    );
+  for (const evaluation of evaluations) {
+    writeUnestablishedPremise(evaluation);
   }
 
   for (const affected of affectedDecisions) {
     writeAffectedDecision(affected);
   }
 
-  if (changes.length > 0 || affectedDecisions.length > 0) {
+  if (
+    evaluations.some(({ result }) => result.status !== "established") ||
+    affectedDecisions.length > 0
+  ) {
     process.exitCode = 1;
   }
+}
+
+function writeUnestablishedPremise({
+  premise,
+  provider,
+  result,
+}: PremiseEvaluation) {
+  if (result.status === "established") {
+    return;
+  }
+
+  if (result.status === "unknown") {
+    process.stdout.write(
+      `${premise.id} unknown via ${provider}: ${result.reason}\n`,
+    );
+    return;
+  }
+
+  process.stdout.write(
+    [
+      `${premise.id} failed via ${provider}.`,
+      ...result.diagnostics.map(({ message, uri }) =>
+        uri ? `- ${message} (${uri})` : `- ${message}`,
+      ),
+      "",
+    ].join("\n"),
+  );
 }
 
 function writeAffectedDecision({
