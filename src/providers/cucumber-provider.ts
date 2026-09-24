@@ -36,25 +36,26 @@ export function createCucumberProvider({
   allowEmpty?: boolean;
   silent?: boolean;
 } = {}): PremiseProvider {
-  let project: CucumberProject | undefined;
-
   return {
     dialects: ["gherkin"],
     id: "cucumber",
-    async discover(context) {
+    async prepare(context) {
       const discovery = await discoverCucumberPremises({
         allowEmpty,
         context,
         silent,
       });
-      project = discovery.project;
-      return discovery.premises;
-    },
-    async evaluate(premise, context) {
-      if (!project || project.projectDirectory !== context.projectDirectory) {
-        throw new Error("Cucumber premises must be discovered before evaluation");
-      }
-      return evaluateCucumberPremise({ context, premise, project });
+      return {
+        async discover() {
+          return discovery.premises;
+        },
+        async evaluate(premise) {
+          return evaluateCucumberPremise({
+            premise,
+            project: discovery.project,
+          });
+        },
+      };
     },
   };
 }
@@ -136,11 +137,9 @@ async function discoverCucumberPremises({
 }
 
 async function evaluateCucumberPremise({
-  context,
   premise,
   project,
 }: {
-  context: EvaluationContext;
   premise: Premise;
   project: CucumberProject;
 }): Promise<EvaluationResult> {
@@ -166,7 +165,7 @@ async function evaluateCucumberPremise({
     const baselineExitCode = await runCucumberProcess({
       arguments: ["--dry-run", ...cucumberArguments, source],
       coverageDirectory: baselineCoverageDirectory,
-      projectDirectory: context.projectDirectory,
+      projectDirectory: project.projectDirectory,
       silent: true,
       typeScriptConfiguration: project.typeScriptConfiguration,
     });
@@ -174,7 +173,7 @@ async function evaluateCucumberPremise({
       await runCucumberProcess({
         arguments: ["--dry-run", ...cucumberArguments, source],
         coverageDirectory: baselineCoverageDirectory,
-        projectDirectory: context.projectDirectory,
+        projectDirectory: project.projectDirectory,
         silent: project.silent,
         typeScriptConfiguration: project.typeScriptConfiguration,
       });
@@ -187,7 +186,7 @@ async function evaluateCucumberPremise({
     const exitCode = await runCucumberProcess({
       arguments: [...cucumberArguments, source],
       coverageDirectory,
-      projectDirectory: context.projectDirectory,
+      projectDirectory: project.projectDirectory,
       silent: project.silent,
       typeScriptConfiguration: project.typeScriptConfiguration,
     });
@@ -210,7 +209,7 @@ async function evaluateCucumberPremise({
     const { artifacts, unreliableModulePaths } = await collectExecutedArtifacts({
       baselineCoverageDirectory,
       coverageDirectory,
-      projectDirectory: context.projectDirectory,
+      projectDirectory: project.projectDirectory,
       stepFiles: project.stepFiles,
     });
     for (const path of unreliableModulePaths) {

@@ -42,26 +42,23 @@ export function createDependencyCruiserProvider({
   configFiles?: string[];
   sourcePaths?: string[];
 } = {}): PremiseProvider {
-  let project: DependencyCruiserProject | undefined;
-
   return {
     dialects: ["dependency-cruiser"],
     id: "dependency-cruiser",
-    async discover(context) {
-      project = await discoverArchitecturePremises({
+    async prepare(context) {
+      const project = await discoverArchitecturePremises({
         configFiles,
         context,
         sourcePaths,
       });
-      return [...project.rules.values()].map(({ premise }) => premise);
-    },
-    async evaluate(premise, context) {
-      if (!project || project.projectDirectory !== context.projectDirectory) {
-        throw new Error(
-          "Dependency-cruiser premises must be discovered before evaluation",
-        );
-      }
-      return evaluateArchitecturePremise({ premise, project });
+      return {
+        async discover() {
+          return [...project.rules.values()].map(({ premise }) => premise);
+        },
+        async evaluate(premise) {
+          return evaluateArchitecturePremise({ premise, project });
+        },
+      };
     },
   };
 }

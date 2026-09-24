@@ -1,6 +1,9 @@
 {
   "cucumber": {
-    "features": ["features/self-host-context-projection.feature"],
+    "features": [
+      "features/provider-session-isolation.feature",
+      "features/self-host-context-projection.feature"
+    ],
     "steps": ["features/step_definitions/**/*.ts"]
   },
   "version": 1

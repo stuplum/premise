@@ -19,6 +19,12 @@ import {
   setWorldConstructor,
   type IWorldOptions,
 } from "@cucumber/cucumber";
+import { createDependencyCruiserProvider } from "../../src/providers/dependency-cruiser-provider.js";
+import type {
+  EvaluationResult,
+  Premise,
+  PremiseProviderSession,
+} from "../../src/provider.js";
 
 const cliPath = resolve("dist/cli.js");
 const originalRequirement = "Feature: Take a payment\n";
@@ -35,12 +41,67 @@ class PremiseWorld {
   };
   environment: Record<string, string> = {};
   projectDirectory = "";
+  providerProjects: string[] = [];
+  providerSessionEvaluations: Array<{
+    premise: Premise;
+    result: EvaluationResult;
+  }> = [];
   result?: SpawnSyncReturns<string>;
 
   constructor(_options: IWorldOptions) {}
 }
 
 setWorldConstructor(PremiseWorld);
+
+Given(
+  "two projects define distinct architecture premises",
+  async function (this: PremiseWorld) {
+    this.providerProjects = await Promise.all(
+      ["ARCH-101", "ARCH-202"].map(createArchitectureProviderProject),
+    );
+  },
+);
+
+When(
+  "I prepare both projects with the same provider before evaluating either",
+  async function (this: PremiseWorld) {
+    const provider = createDependencyCruiserProvider();
+    const prepared: Array<{
+      premise: Premise;
+      session: PremiseProviderSession;
+    }> = [];
+
+    for (const projectDirectory of this.providerProjects) {
+      const session = await provider.prepare({ projectDirectory });
+      const [premise] = await session.discover();
+      assert.ok(premise, `No premise discovered in ${projectDirectory}`);
+      prepared.push({ premise, session });
+    }
+
+    this.providerSessionEvaluations = await Promise.all(
+      prepared.map(async ({ premise, session }) => ({
+        premise,
+        result: await session.evaluate(premise),
+      })),
+    );
+  },
+);
+
+Then(
+  "each provider session establishes its own architecture premise",
+  function (this: PremiseWorld) {
+    assert.deepEqual(
+      this.providerSessionEvaluations.map(({ premise, result }) => ({
+        id: premise.id,
+        status: result.status,
+      })),
+      [
+        { id: "ARCH-101", status: "established" },
+        { id: "ARCH-202", status: "established" },
+      ],
+    );
+  },
+);
 
 Given("an empty project", async function (this: PremiseWorld) {
   this.projectDirectory = await mkdtemp(join(tmpdir(), "premise-acceptance-"));
@@ -1414,9 +1475,11 @@ Then(
 );
 
 After(async function (this: PremiseWorld) {
-  if (this.projectDirectory) {
-    await rm(this.projectDirectory, { force: true, recursive: true });
-  }
+  await Promise.all(
+    [this.projectDirectory, ...this.providerProjects]
+      .filter(Boolean)
+      .map((path) => rm(path, { force: true, recursive: true })),
+  );
 });
 
 function splitCommand(command: string) {
@@ -1465,6 +1528,36 @@ async function writeProjectFileIfMissing({
 
 async function writeJson(path: string, value: unknown) {
   await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+}
+
+async function createArchitectureProviderProject(premiseId: string) {
+  const projectDirectory = await mkdtemp(join(tmpdir(), "premise-provider-"));
+  await writeJson(join(projectDirectory, ".dependency-cruiser.json"), {
+    forbidden: [
+      {
+        comment: "Domain code must not depend on infrastructure",
+        from: { path: "^src/domain" },
+        name: premiseId,
+        severity: "error",
+        to: { path: "^src/infrastructure" },
+      },
+    ],
+    options: {
+      doNotFollow: { path: "node_modules" },
+      includeOnly: "^src",
+    },
+  });
+  await writeProjectFile({
+    content: 'export const domainValue = "domain";\n',
+    projectDirectory,
+    relativePath: "src/domain.ts",
+  });
+  await writeProjectFile({
+    content: 'export const infrastructureValue = "infrastructure";\n',
+    projectDirectory,
+    relativePath: "src/infrastructure.ts",
+  });
+  return projectDirectory;
 }
 
 function escapeRegex(value: string) {

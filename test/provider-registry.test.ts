@@ -101,28 +101,68 @@ test("premise identities must be unique across providers", async () => {
   );
 });
 
+test("prepared provider sessions isolate interleaved project evaluations", async () => {
+  const provider = createProvider({
+    dialects: ["gherkin"],
+    id: "cucumber",
+    premises: [behaviourPremise],
+    projectScopedEvidence: true,
+  });
+
+  const projectA = await provider.prepare({ projectDirectory: "/project-a" });
+  const projectB = await provider.prepare({ projectDirectory: "/project-b" });
+  const [premiseA] = await projectA.discover();
+  const [premiseB] = await projectB.discover();
+
+  assert.deepEqual(await projectA.evaluate(premiseA), {
+    evidence: [
+      { role: "assertion", uri: "/project-a/features/payment.feature" },
+    ],
+    status: "established",
+  });
+  assert.deepEqual(await projectB.evaluate(premiseB), {
+    evidence: [
+      { role: "assertion", uri: "/project-b/features/payment.feature" },
+    ],
+    status: "established",
+  });
+});
+
 function createProvider({
   dialects,
   id,
   onEvaluate,
   premises,
+  projectScopedEvidence = false,
 }: {
   dialects: string[];
   id: string;
   onEvaluate?: () => void;
   premises: Premise[];
+  projectScopedEvidence?: boolean;
 }): PremiseProvider {
   return {
     dialects,
     id,
-    async discover() {
-      return premises;
-    },
-    async evaluate(premise) {
-      onEvaluate?.();
+    async prepare({ projectDirectory }) {
       return {
-        evidence: [{ role: "assertion", uri: premise.assertion.ref.uri }],
-        status: "established",
+        async discover() {
+          return premises;
+        },
+        async evaluate(premise) {
+          onEvaluate?.();
+          return {
+            evidence: [
+              {
+                role: "assertion",
+                uri: projectScopedEvidence
+                  ? `${projectDirectory}/${premise.assertion.ref.uri}`
+                  : premise.assertion.ref.uri,
+              },
+            ],
+            status: "established",
+          };
+        },
       };
     },
   };
