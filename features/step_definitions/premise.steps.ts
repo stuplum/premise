@@ -13,6 +13,7 @@ import { dirname, join, resolve } from "node:path";
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import {
   After,
+  DataTable,
   Given,
   Then,
   When,
@@ -434,6 +435,59 @@ Given(
       ].join("\n"),
       projectDirectory: this.projectDirectory,
       relativePath: "features/step_definitions/payment.steps.ts",
+    });
+  },
+);
+
+Given(
+  "architecture premise {string} protects {string} from {string}",
+  async function (
+    this: PremiseWorld,
+    premiseId: string,
+    subjectPath: string,
+    forbiddenDependencyPath: string,
+  ) {
+    await linkPremisePackage({ projectDirectory: this.projectDirectory });
+    await writeJson(join(this.projectDirectory, ".dependency-cruiser.json"), {
+      forbidden: [
+        {
+          comment: "Domain code must not depend on HTTP infrastructure",
+          from: { path: `^${escapeRegex(subjectPath)}$` },
+          name: premiseId,
+          severity: "error",
+          to: { path: `^${escapeRegex(forbiddenDependencyPath)}$` },
+        },
+      ],
+      options: {
+        doNotFollow: { path: "node_modules" },
+        includeOnly: "^src",
+      },
+    });
+    await writeProjectFileIfMissing({
+      content: 'export const paymentStatus = "accepted";\n',
+      projectDirectory: this.projectDirectory,
+      relativePath: subjectPath,
+    });
+    await writeProjectFile({
+      content: 'export const sendPayment = () => "sent";\n',
+      projectDirectory: this.projectDirectory,
+      relativePath: forbiddenDependencyPath,
+    });
+  },
+);
+
+Given(
+  "the architecture premise is violated",
+  async function (this: PremiseWorld) {
+    await writeProjectFile({
+      content: [
+        'import { sendPayment } from "./http-client.js";',
+        "",
+        "export const paymentStatus = sendPayment();",
+        "",
+      ].join("\n"),
+      projectDirectory: this.projectDirectory,
+      relativePath: "src/payment.ts",
     });
   },
 );
@@ -1184,6 +1238,41 @@ Then(
 );
 
 Then(
+  "compiled context for {string} records these premises:",
+  async function (
+    this: PremiseWorld,
+    artifactPath: string,
+    table: DataTable,
+  ) {
+    const context = JSON.parse(
+      await readFile(
+        join(this.projectDirectory, `.premise/compiled/${artifactPath}.json`),
+        "utf8",
+      ),
+    ) as { premises: Array<{ id: string; provider: string }> };
+    assert.deepEqual(
+      context.premises.map(({ id, provider }) => ({ id, provider })),
+      table.hashes(),
+    );
+  },
+);
+
+Then(
+  "the command returns architecture premise {string}",
+  function (this: PremiseWorld, premiseId: string) {
+    const output = commandOutput(this);
+    assert.match(output, new RegExp(`"name": "${escapeRegex(premiseId)}"`));
+    assert.match(output, /Domain code must not depend on HTTP infrastructure/);
+  },
+);
+
+Then("the command reports the forbidden dependency", function (this: PremiseWorld) {
+  const output = commandOutput(this);
+  assert.match(output, /src\/payment\.ts/);
+  assert.match(output, /src\/http-client\.ts/);
+});
+
+Then(
   "the command reports that compiled context must be regenerated",
   function (this: PremiseWorld) {
     assert.match(
@@ -1259,6 +1348,22 @@ async function writeProjectFile({
   const path = join(projectDirectory, relativePath);
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, content, "utf8");
+}
+
+async function writeProjectFileIfMissing({
+  content,
+  projectDirectory,
+  relativePath,
+}: {
+  content: string;
+  projectDirectory: string;
+  relativePath: string;
+}) {
+  try {
+    await access(join(projectDirectory, relativePath));
+  } catch {
+    await writeProjectFile({ content, projectDirectory, relativePath });
+  }
 }
 
 async function writeJson(path: string, value: unknown) {

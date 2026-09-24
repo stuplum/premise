@@ -8,7 +8,7 @@ import {
   type DecisionRequiringReview,
 } from "./decision-awareness.js";
 import { evaluatePremises, type PremiseEvaluation } from "./provider.js";
-import { createCucumberProvider } from "./providers/cucumber-provider.js";
+import { createDefaultProviders } from "./providers/default-providers.js";
 
 try {
   await run({ arguments: process.argv.slice(2), projectDirectory: process.cwd() });
@@ -50,7 +50,7 @@ async function runCheck({ projectDirectory }: { projectDirectory: string }) {
   const [evaluations, affectedDecisions] = await Promise.all([
     evaluatePremises({
       projectDirectory,
-      providers: [createCucumberProvider({ allowEmpty: true, silent: true })],
+      providers: createDefaultProviders({ silentCucumber: true }),
     }),
     findDecisionsRequiringReview({ projectDirectory }),
   ]);

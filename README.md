@@ -146,6 +146,38 @@ Gherkin integration currently treats one feature file as one requirement
 boundary. A feature may contain one stable requirement ID. Multiple IDs are
 rejected because execution coverage is currently attributed at file level.
 
+### Enforce architecture dependency constraints
+
+Premise also bundles a dependency-cruiser provider. A named forbidden
+dependency rule becomes an architecture premise when its name is a stable
+Premise ID and its comment describes the constraint:
+
+```json
+{
+  "forbidden": [
+    {
+      "name": "ARCH-003",
+      "comment": "Domain code must not depend on HTTP infrastructure",
+      "severity": "error",
+      "from": { "path": "^src/domain" },
+      "to": { "path": "^src/http" }
+    }
+  ],
+  "options": {
+    "includeOnly": "^src"
+  }
+}
+```
+
+Save the rule in a standard `.dependency-cruiser.js`, `.cjs`, `.mjs`, or
+`.json` configuration. `premise check` evaluates it alongside Gherkin premises
+in the same invocation. `premise test` also records each matching source module
+as evidence, so `premise context src/domain/order.ts` returns both behavioural
+and architecture sources relevant to that artifact.
+
+The bundled CLI currently cruises `src`. Consumers of the public provider
+factory can supply different source paths.
+
 ## Installation
 
 ```sh
@@ -176,6 +208,7 @@ Discovery paths can be overridden with `premise.json`:
 ## Repository artifacts
 
 - `**/*.decision` — authoritative architecture decisions.
+- `.dependency-cruiser.{js,cjs,mjs,json}` — executable architecture premises.
 - `.premise/reviews/` — generated decision-review receipts.
 - `.premise/compiled/` — generated requirement-to-implementation relationships.
 - `premise.json` — optional discovery configuration.
@@ -216,8 +249,9 @@ evaluated premises. They participate in the same knowledge relationships but do
 not receive a synthetic pass or fail status.
 
 The provider abstraction is product direction rather than a claim that all of
-these dialects are implemented today. Current executable support is Cucumber;
-decision drivers are language- and framework-agnostic.
+these dialects are implemented today. Current executable support includes
+Cucumber and dependency-cruiser; decision drivers are language- and
+framework-agnostic.
 
 ## Development
 

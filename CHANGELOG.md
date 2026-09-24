@@ -7,6 +7,8 @@ Initial experimental release.
 - Runs executable Gherkin through bundled Cucumber support.
 - Evaluates executable premises through provider-neutral `established`,
   `failed`, and `unknown` results during `premise check`.
+- Evaluates named dependency-cruiser rules as architecture premises alongside
+  Cucumber behaviour and compiles their subject evidence into shared context.
 - Discovers implementation relationships from successful feature execution.
 - Stores compiled relationships as provider-neutral schema v2 premise evidence
   without executable-validity fingerprints.

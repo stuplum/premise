@@ -8,6 +8,7 @@ export { readConfiguration } from "./repository.js";
 export { runExecutableRequirements } from "./executable-requirements.js";
 export { evaluatePremises } from "./provider.js";
 export { createCucumberProvider } from "./providers/cucumber-provider.js";
+export { createDependencyCruiserProvider } from "./providers/dependency-cruiser-provider.js";
 export type {
   ArtifactContext,
   CompiledPremise,
