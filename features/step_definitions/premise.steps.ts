@@ -1366,18 +1366,6 @@ Then(
 );
 
 Then(
-  "the command reports that {string} must contain one requirement ID",
-  function (this: PremiseWorld, source: string) {
-    assert.match(
-      commandOutput(this),
-      new RegExp(
-        `${escapeRegex(source)} must contain at most one requirement ID`,
-      ),
-    );
-  },
-);
-
-Then(
   "the command returns architecture premise {string}",
   function (this: PremiseWorld, premiseId: string) {
     const output = commandOutput(this);
