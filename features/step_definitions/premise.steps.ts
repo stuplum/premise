@@ -20,9 +20,13 @@ import {
   type IWorldOptions,
 } from "@cucumber/cucumber";
 import { createDependencyCruiserProvider } from "../../src/providers/dependency-cruiser-provider.js";
+import { createArtifactContextProjection } from "../../src/context-projection.js";
+import { evaluatePremises } from "../../src/provider.js";
 import type {
   EvaluationResult,
   Premise,
+  PremiseEvaluation,
+  PremiseProvider,
   PremiseProviderSession,
 } from "../../src/provider.js";
 
@@ -46,12 +50,98 @@ class PremiseWorld {
     premise: Premise;
     result: EvaluationResult;
   }> = [];
+  registryProvider?: PremiseProvider;
+  registryPrepared = false;
+  registryEvaluations: PremiseEvaluation[] = [];
+  registryError?: unknown;
   result?: SpawnSyncReturns<string>;
 
   constructor(_options: IWorldOptions) {}
 }
 
 setWorldConstructor(PremiseWorld);
+
+Given(
+  "a third-party provider {string} reports evidence role {string}",
+  function (this: PremiseWorld, id: string, role: string) {
+    const world = this;
+    this.registryProvider = {
+      dialects: ["shared-vocabulary:payment-schema"],
+      id,
+      async prepare() {
+        world.registryPrepared = true;
+        return {
+          async discover() {
+            return [{
+              assertion: {
+                dialect: "shared-vocabulary:payment-schema",
+                ref: { selector: "#/Payment", uri: "schema/Payment.json" },
+              },
+              description: "A valid payment is accepted",
+              id: "PAY-001",
+              type: "finance:payment-policy",
+            }];
+          },
+          async evaluate() {
+            return {
+              evidence: [{ role, uri: "src/payment.ts" }],
+              status: "established",
+            };
+          },
+        };
+      },
+    };
+  },
+);
+
+When("I evaluate the provider registry", async function (this: PremiseWorld) {
+  assert.ok(this.registryProvider);
+  try {
+    this.registryEvaluations = await evaluatePremises({
+      projectDirectory: this.projectDirectory,
+      providers: [this.registryProvider],
+    });
+  } catch (error) {
+    this.registryError = error;
+  }
+});
+
+Then(
+  "its namespaced premise supplies context for {string}",
+  function (this: PremiseWorld, artifact: string) {
+    assert.equal(this.registryError, undefined);
+    const projection = createArtifactContextProjection({
+      artifact,
+      decisions: [],
+      evaluations: this.registryEvaluations,
+    });
+    assert.deepEqual(projection.knowledge, [{
+      description: "A valid payment is accepted",
+      dialect: "shared-vocabulary:payment-schema",
+      id: "PAY-001",
+      kind: "premise",
+      premiseType: "finance:payment-policy",
+      provider: "acme:checker",
+      source: { selector: "#/Payment", uri: "schema/Payment.json" },
+      state: { status: "established" },
+    }]);
+  },
+);
+
+Then(
+  "the registry rejects the provider before preparation",
+  function (this: PremiseWorld) {
+    assert.ok(this.registryError instanceof Error);
+    assert.match(this.registryError.message, /Invalid provider ID/);
+    assert.equal(this.registryPrepared, false);
+  },
+);
+
+Then("the registry rejects the evidence role", function (this: PremiseWorld) {
+  assert.ok(this.registryError instanceof Error);
+  assert.match(this.registryError.message, /Invalid evidence role/);
+  assert.deepEqual(this.registryEvaluations, []);
+});
 
 Given(
   "two projects define distinct architecture premises",

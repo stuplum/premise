@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Reserves canonical provider, premise type, dialect, and evidence-role
+  identifiers, with independent `namespace:name` extensions for third parties.
+- Rejects invalid registry identifiers before provider preparation, invalid
+  discoveries before evaluation, and ambiguous roles in evaluation evidence.
+- Exposes `isKnownEvidenceRole` and `KnownEvidenceRole` for consumers that
+  distinguish canonical evidence semantics from opaque extensions.
+
 ## 0.1.1 - 2026-09-24
 
 - Makes provider definitions reusable across projects through explicit,

@@ -49,3 +49,18 @@ Feature: Keep live provider evidence reliable
     When I run "premise context src/payment.ts"
     Then the command succeeds
     And context reports premise "PAY-001" as "behaviour" in "gherkin" via "cucumber" with state "established"
+
+  Scenario: Extend provider vocabularies without changing the core
+    Given a third-party provider "acme:checker" reports evidence role "shared-vocabulary:subject"
+    When I evaluate the provider registry
+    Then its namespaced premise supplies context for "src/payment.ts"
+
+  Scenario: Reject an ambiguous provider identity before preparation
+    Given a third-party provider "checker" reports evidence role "subject"
+    When I evaluate the provider registry
+    Then the registry rejects the provider before preparation
+
+  Scenario: Reject an ambiguous evidence role before exposing context
+    Given a third-party provider "acme:checker" reports evidence role "execution"
+    When I evaluate the provider registry
+    Then the registry rejects the evidence role
