@@ -2,9 +2,11 @@
 
 **Executable repository knowledge for software teams and coding agents.**
 
-Premise connects executable requirements, architecture constraints and architectural decisions so that important repository knowledge can be checked as the code changes.
+Premise connects executable requirements and architecture constraints to the decisions they support. Its purpose is to reveal when changed requirements or implementation undermine those decisions, without erasing why they were made.
 
 Premises are mechanically evaluated. Decisions remain human judgement and are tracked against the knowledge that drove them.
+
+Start with [Why Premise exists](docs/purpose.md) for the motivation, defining example and criteria for future work.
 
 > Experimental `0.1` software. Requires Node.js 20+.
 
