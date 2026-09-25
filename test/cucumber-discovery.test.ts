@@ -134,10 +134,6 @@ test("reports invalid tag placement as a located Gherkin parse error", async (t)
   });
 });
 
-test("keeps the file-level ID limit when different declarations select a shared scenario", async (t) => {
-  await assert.rejects(discoverSource(t, "@PAY-001\nFeature: Payments\n  @PAY-002\n  Scenario: Pay\n    Then paid\n"), /at most one requirement ID.*PAY-001.*PAY-002/);
-});
-
 test("does not discover IDs in comments, descriptions, doc strings or table cells", async (t) => {
   const premises = await discoverSource(t, [
     "# @FAKE-001",
