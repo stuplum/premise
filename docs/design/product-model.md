@@ -4,6 +4,10 @@
 
 This document records design direction, not a fully implemented public API.
 
+[Why Premise exists](../purpose.md) defines the outcomes this model must support.
+Use that purpose to evaluate changes to these mechanisms, not the existing
+mechanisms to narrow the purpose.
+
 ## Separate the type, dialect, and provider
 
 Premise should represent mechanical knowledge without assuming that one format
