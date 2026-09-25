@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { basename, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { glob } from "glob";
-import { requirementIds } from "../gherkin-requirements.js";
+import { discoverGherkinRequirements } from "../gherkin-requirements.js";
 import type {
   EvaluationContext,
   EvaluationResult,
@@ -99,22 +99,31 @@ async function discoverCucumberPremises({
   const premises = await Promise.all(
     featureFiles.sort().map(async (source) => {
       const content = await readFile(join(projectDirectory, source), "utf8");
-      const ids = requirementIds({ content, uri: source });
-      if (ids.length > 1) {
+      const { feature, requirements } = discoverGherkinRequirements({
+        content,
+        uri: source,
+      });
+      if (requirements.length > 1) {
         throw new Error(
-          `${source} must contain at most one requirement ID. Found: ${ids.join(", ")}`,
+          `${source} must contain at most one requirement ID. Found: ${requirements.map(({ id }) => id).join(", ")}`,
         );
       }
+      const requirement = requirements[0];
+      const node = requirement?.node ?? feature;
+      const position = node
+        ? { line: node.location.line, column: node.location.column ?? 1 }
+        : undefined;
       return {
         assertion: {
           dialect: "gherkin",
           ref: {
-            ...(ids[0] ? { selector: `@${ids[0]}` } : {}),
+            ...(requirement ? { selector: requirement.tag.name } : {}),
+            ...(position ? { range: { start: position, end: position } } : {}),
             uri: source,
           },
         },
-        description: basename(source, extname(source)),
-        id: ids[0] ?? `cucumber:${source}`,
+        description: node?.name || node?.keyword || basename(source, extname(source)),
+        id: requirement?.id ?? `cucumber:${source}`,
         type: "behaviour",
       };
     }),

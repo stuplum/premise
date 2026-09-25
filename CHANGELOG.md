@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Discovers Cucumber premise declarations from the Gherkin AST, retaining
+  node descriptions, source locations and inherited scenario selections.
+- Reports malformed Gherkin, duplicate stable-ID declarations and tagged
+  nodes without executable scenarios while retaining the one-ID-per-file limit.
+
 ## 0.1.1 - 2026-09-24
 
 - Makes provider definitions reusable across projects through explicit,
