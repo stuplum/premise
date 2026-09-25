@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Clarifies repository-owned premise identity and provider-owned metadata
+  binding, with native and sidecar OpenAPI examples using the existing API.
+
 ## 0.1.1 - 2026-09-24
 
 - Makes provider definitions reusable across projects through explicit,
