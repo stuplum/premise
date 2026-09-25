@@ -56,7 +56,27 @@ assertion: features/payment.feature
 selector: @PAY-001
 ```
 
-The feature filename is used as its description in the current implementation.
+The description comes from the tagged Gherkin node's name, such as `Take a payment`, rather than the feature filename.
+
+## Discovery and declaration scope
+
+Premise parses each feature with the official Gherkin parser. Stable ID tags such as `@PAY-001` belong to the actual node on which they are declared:
+
+| Tagged node | Selected executable cases |
+| --- | --- |
+| Feature | Scenarios and outline rows throughout the feature, including its rules |
+| Rule | Scenarios and outline rows within that rule |
+| Scenario | That scenario |
+| Scenario Outline | Rows from all of that outline's Examples blocks |
+| Examples | Rows from that Examples block only |
+
+The compiler supplies inherited tags and expanded outline rows. An ID inherited by several scenarios or rows remains one declaration. Repeating the same ID explicitly, whether on the same node or on separate nodes, is rejected with both tag locations. IDs in comments, descriptions, doc strings and table cells are not declarations.
+
+The assertion reference retains the feature URI, stable tag selector and a `range` pointing to the declaring node's keyword. Its start and end are the same one-based line and column because Gherkin supplies a start location, not a full source span. Untagged features use the Feature name and location where available.
+
+Malformed Gherkin, including tags on unsupported nodes such as Background, is rejected with the parser's source-located diagnostic. A stable ID must select at least one compiled scenario or outline row containing executable steps. Empty tagged features, rules, scenarios and Examples blocks are rejected rather than silently losing their identity.
+
+Different IDs can legitimately select shared scenarios. Discovery retains those semantic selections, but the current file-level limit below still rejects multiple stable IDs. Evaluation continues to execute the whole feature file; declaration scope does not yet isolate execution.
 
 ## Step definitions
 
