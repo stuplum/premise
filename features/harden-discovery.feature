@@ -45,3 +45,65 @@ Feature: Fail clearly when executable requirement discovery is unreliable
     When I run "premise test"
     Then the command fails
     And the command reports the missing implementation import
+
+  Scenario: Locate the Gherkin declaration rather than an inherited scenario
+    Given an empty project
+    And the discovery feature contains:
+      """
+      @PAY-001
+      Feature: Take payments
+        Rule: Accepted methods
+          Scenario Outline: Accept <method>
+            Then paid with <method>
+            Examples: Methods
+              | method |
+              | card   |
+              | cash   |
+      """
+    When I discover the behavioural premises
+    Then discovery finds premise "PAY-001" described as "Take payments" at line 2 column 1
+
+  Scenario: Discover a premise declared on an Examples block
+    Given an empty project
+    And the discovery feature contains:
+      """
+      Feature: Take payments
+        Scenario Outline: Accept <method>
+          Then paid with <method>
+          @PAY-001
+          Examples: Supported methods
+            | method |
+            | card   |
+            | cash   |
+      """
+    When I discover the behavioural premises
+    Then discovery finds premise "PAY-001" described as "Supported methods" at line 5 column 5
+
+  Scenario: Reject repeated declarations rather than merge them
+    Given an empty project
+    And the discovery feature contains:
+      """
+      Feature: Take payments
+        @PAY-001
+        Scenario: Pay
+          Then paid
+        @PAY-001
+        Scenario: Retry
+          Then paid
+      """
+    When I discover the behavioural premises
+    Then discovery rejects "PAY-001" at line 5 column 3
+
+  Scenario: Reject a tagged Examples block without executable rows
+    Given an empty project
+    And the discovery feature contains:
+      """
+      Feature: Take payments
+        Scenario Outline: Accept <method>
+          Then paid with <method>
+          @PAY-001
+          Examples: No methods
+            | method |
+      """
+    When I discover the behavioural premises
+    Then discovery rejects "PAY-001" at line 4 column 5

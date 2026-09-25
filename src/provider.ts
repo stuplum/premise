@@ -24,6 +24,7 @@ export type PremiseAssertion = {
 };
 
 export type AssertionReference = {
+  range?: SourceRange;
   selector?: string;
   uri: string;
 };

@@ -15,13 +15,6 @@ Feature: Keep live provider evidence reliable
     Then the command fails
     And the command reports duplicate requirement ID "PAY-001"
 
-  Scenario: Reject multiple requirement IDs in one feature file
-    Given an empty project
-    And one executable feature contains requirement IDs "PAY-001" and "PAY-002"
-    When I run "premise test"
-    Then the command fails
-    And the command reports that "features/payments.feature" must contain one requirement ID
-
   Scenario: Ignore an application module that is imported but not exercised
     Given an empty project
     And an executable requirement imports "src/payment.ts" without exercising it

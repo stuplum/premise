@@ -8,6 +8,12 @@
   discoveries before evaluation, and ambiguous roles in evaluation evidence.
 - Exposes `isKnownEvidenceRole` and `KnownEvidenceRole` for consumers that
   distinguish canonical evidence semantics from opaque extensions.
+- Discovers Cucumber premise declarations from the Gherkin AST, retaining
+  node descriptions, source locations and inherited scenario selections.
+- Reports malformed Gherkin, duplicate stable-ID declarations and tagged
+  nodes without executable scenarios.
+- Evaluates multiple premises in one feature independently, with selector-scoped
+  dry runs, outcomes and coverage evidence including shared backgrounds.
 
 ## 0.1.1 - 2026-09-24
 
