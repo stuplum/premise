@@ -19,6 +19,59 @@ This prevents the core from treating Gherkin, behaviour, and Cucumber as the
 same concept. Gherkin is a dialect, behaviour is a premise type, and Cucumber is
 a provider.
 
+## Canonical identifiers and extensions
+
+Provider IDs, premise types, dialect IDs, and evidence roles are independent,
+case-sensitive string vocabularies. Their unqualified identifiers are reserved
+for the following canonical meanings:
+
+| Vocabulary | Canonical identifiers |
+| --- | --- |
+| Provider ID | `cucumber`, `dependency-cruiser` |
+| Premise type | `behaviour`, `architecture`, `contract`, `data`, `policy`, `structure` |
+| Dialect ID | `gherkin`, `dependency-cruiser`, `openapi`, `json-schema`, `rego` |
+| Evidence role | `assertion`, `executed`, `subject`, `dependency` |
+
+A provider ID identifies an evaluator implementation, not a premise or an
+assertion language. A type classifies the knowledge: behaviour describes
+observable outcomes, architecture constrains system organisation, contract
+describes interface obligations, data constrains information, policy expresses
+rules governing permitted states or actions, and structure constrains shape or
+composition. A dialect names the assertion language or format independently of
+both its evaluator and its premise type. Recognising a dialect identifier does
+not mean that a bundled provider implements it.
+
+Third-party identifiers use `namespace:name` in all four vocabularies, including
+the provider ID itself. Both components start with a lowercase ASCII letter,
+then contain lowercase ASCII letters or digits in non-empty, hyphen-separated
+segments. Exactly one colon is required. Whitespace, uppercase letters,
+underscores, repeated hyphens, and leading or trailing hyphens are invalid.
+For example, `acme:payment-checker` can evaluate `shared-vocabulary:payment-schema`
+assertions of type `finance:payment-policy` and emit `shared-vocabulary:input`
+evidence without any core release.
+
+The namespace identifies the organisation or vocabulary owner and should remain
+stable; it is not required to equal the emitting provider's namespace. Providers
+can share established types, dialects, and roles. A qualified identifier is
+opaque to generic consumers, even if its name matches a canonical identifier:
+`acme:assertion` is not an alias for `assertion`. Public fields remain strings,
+not closed enums. Producers must use the exact canonical spelling when they
+intend its meaning; the core does not silently normalise `behavior`, `Gherkin`,
+or other aliases.
+
+`discoverPremises` and `evaluatePremises` validate the entire registry's provider
+IDs and declared dialects before preparing any provider. Discovered premise
+types and dialects must use valid vocabulary, and the emitting provider must
+declare the exact dialect. All discoveries are validated before any evaluation.
+Evidence roles are validated when evaluation results cross back into the core,
+for both established and failed results. Invalid identifiers reject the call
+rather than returning ambiguous knowledge. Calling a provider session directly
+bypasses these core boundary checks.
+
+These rules do not apply to repository-owned stable premise IDs such as
+`PAY-001`, assertion source URIs, or dialect-specific selectors such as
+`@PAY-001` and `#/Payment`. Those retain their existing identity and syntax.
+
 ## Candidate premise API
 
 ```ts
@@ -100,6 +153,22 @@ export interface Evidence {
 
 Evidence identifies live source. It is not a fingerprint and should not become
 a generated explanation of that source.
+
+The canonical evidence roles describe why a source participates:
+
+- `assertion`: the source that defines the mechanical assertion;
+- `executed`: implementation source exercised while evaluating the assertion;
+- `subject`: source selected as the object of a check, whether or not executed;
+- `dependency`: a dependency target involved in the evaluated relationship.
+
+A missing role is permitted and makes no claim about the relationship's kind.
+Generic consumers can import `isKnownEvidenceRole` and the `KnownEvidenceRole`
+type from `@stuplum/premise` to narrow a value to the canonical role vocabulary.
+The guard returns false for qualified extensions, absent roles, and invalid
+values; it is not an extension-identifier validator. Unknown qualified roles
+should be preserved without interpreting their suffix as a canonical role.
+Artifact context excludes canonical `assertion` evidence from implementation
+relationships, while retaining matching evidence with other or absent roles.
 
 ## Decisions are related but distinct
 

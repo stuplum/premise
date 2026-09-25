@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Reserves canonical provider, premise type, dialect, and evidence-role
+  identifiers, with independent `namespace:name` extensions for third parties.
+- Rejects invalid registry identifiers before provider preparation, invalid
+  discoveries before evaluation, and ambiguous roles in evaluation evidence.
+- Exposes `isKnownEvidenceRole` and `KnownEvidenceRole` for consumers that
+  distinguish canonical evidence semantics from opaque extensions.
 - Discovers Cucumber premise declarations from the Gherkin AST, retaining
   node descriptions, source locations and inherited scenario selections.
 - Reports malformed Gherkin, duplicate stable-ID declarations and tagged

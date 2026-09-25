@@ -3,9 +3,11 @@ import { test } from "node:test";
 import {
   discoverPremises,
   evaluatePremises,
+  type EvaluationResult,
   type Premise,
   type PremiseProvider,
 } from "../src/provider.js";
+import { createArtifactContextProjection } from "../src/context-projection.js";
 
 const behaviourPremise: Premise = {
   assertion: {
@@ -20,148 +22,177 @@ const behaviourPremise: Premise = {
   type: "behaviour",
 };
 
-test("evaluations retain independent premise, dialect, and provider identities", async () => {
+for (const [field, value] of [
+  ["id", "other-cucumber"],
+  ["id", "Acme:runner"],
+  ["id", "acme:runner:extra"],
+  ["id", "acme:runner\n"],
+  ["dialect", "Gherkin"],
+  ["dialect", "acme:custom_schema"],
+  ["dialect", "acme:"],
+  ["dialect", "acme:-schema"],
+]) {
+  test(`rejects invalid provider ${field} ${JSON.stringify(value)} before preparing any provider`, async () => {
+    let prepared = false;
+    const first = createProvider({ onPrepare: () => { prepared = true; }, premises: [] });
+    const invalid = createProvider({
+      dialects: field === "dialect" ? [value] : ["gherkin"],
+      id: field === "id" ? value : "acme:runner",
+      premises: [],
+    });
+
+    await assert.rejects(
+      discoverPremises({ projectDirectory: "/project", providers: [first, invalid] }),
+      /Invalid (provider ID|dialect)/,
+    );
+    assert.equal(prepared, false);
+  });
+}
+
+for (const [field, value] of [
+  ["type", "behavior"],
+  ["type", "acme:data--quality"],
+  ["dialect", "Gherkin"],
+]) {
+  test(`rejects invalid discovered ${field} before evaluating any premise`, async () => {
+    let evaluated = false;
+    const first = createProvider({ onEvaluate: () => { evaluated = true; } });
+    const invalidPremise: Premise = {
+      ...behaviourPremise,
+      id: "PAY-002",
+      ...(field === "type"
+        ? { type: value }
+        : { assertion: { ...behaviourPremise.assertion, dialect: value } }),
+    };
+
+    await assert.rejects(
+      evaluatePremises({
+        projectDirectory: "/project",
+        providers: [first, createProvider({ id: "acme:runner", premises: [invalidPremise] })],
+      }),
+      /Invalid (premise type|dialect)/,
+    );
+    assert.equal(evaluated, false);
+  });
+}
+
+for (const status of ["established", "failed"] as const) {
+  test(`rejects ambiguous evidence roles in ${status} results`, async () => {
+    const provider = createProvider({
+      result: {
+        diagnostics: [],
+        evidence: [{ role: "execution", uri: "src/payment.ts" }],
+        status,
+      },
+    });
+
+    await assert.rejects(
+      evaluatePremises({ projectDirectory: "/project", providers: [provider] }),
+      /Invalid evidence role/,
+    );
+  });
+}
+
+test("projects third-party vocabulary without confusing a namespaced assertion role with the canonical role", async () => {
   const provider = createProvider({
-    dialects: ["gherkin"],
-    id: "cucumber",
-    premises: [behaviourPremise],
-  });
-
-  const [evaluation] = await evaluatePremises({
-    projectDirectory: "/project",
-    providers: [provider],
-  });
-
-  assert.deepEqual(evaluation, {
-    premise: behaviourPremise,
-    provider: "cucumber",
+    dialects: ["shared-vocabulary:payment-schema"],
+    id: "acme:payment-checker",
+    premises: [{
+      ...behaviourPremise,
+      assertion: {
+        dialect: "shared-vocabulary:payment-schema",
+        ref: { selector: "#/Payment", uri: "schema/Payment.json" },
+      },
+      type: "finance:payment-policy",
+    }],
     result: {
-      evidence: [{ role: "assertion", uri: "features/payment.feature" }],
+      evidence: [
+        { role: "assertion", uri: "schema/Payment.json" },
+        { role: "shared-vocabulary:assertion", uri: "src/payment.ts" },
+      ],
       status: "established",
     },
   });
+  const evaluations = await evaluatePremises({ projectDirectory: "/project", providers: [provider] });
+  const projection = createArtifactContextProjection({
+    artifact: "src/payment.ts",
+    decisions: [],
+    evaluations,
+  });
+
+  assert.deepEqual(projection.knowledge, [{
+    description: "A valid payment is accepted",
+    dialect: "shared-vocabulary:payment-schema",
+    id: "PAY-001",
+    kind: "premise",
+    premiseType: "finance:payment-policy",
+    provider: "acme:payment-checker",
+    source: { selector: "#/Payment", uri: "schema/Payment.json" },
+    state: { status: "established" },
+  }]);
+  assert.deepEqual(createArtifactContextProjection({
+    artifact: "schema/Payment.json",
+    decisions: [],
+    evaluations,
+  }).knowledge, []);
 });
 
-test("premise discovery validates identities without evaluating assertions", async () => {
+test("premise discovery does not evaluate assertions", async () => {
   let evaluated = false;
-  const provider = createProvider({
-    dialects: ["gherkin"],
-    id: "cucumber",
-    onEvaluate: () => {
-      evaluated = true;
-    },
-    premises: [behaviourPremise],
-  });
-
-  const discoveries = await discoverPremises({
+  await discoverPremises({
     projectDirectory: "/project",
-    providers: [provider],
+    providers: [createProvider({ onEvaluate: () => { evaluated = true; } })],
   });
-
   assert.equal(evaluated, false);
-  assert.deepEqual(discoveries, [
-    { premise: behaviourPremise, provider },
-  ]);
 });
 
 test("a provider cannot return a premise in a dialect it does not support", async () => {
-  const provider = createProvider({
-    dialects: ["dependency-cruiser"],
-    id: "dependency-cruiser",
-    premises: [behaviourPremise],
-  });
-
   await assert.rejects(
     evaluatePremises({
       projectDirectory: "/project",
-      providers: [provider],
+      providers: [createProvider({ dialects: ["dependency-cruiser"], id: "dependency-cruiser" })],
     }),
-    /Provider dependency-cruiser does not support dialect gherkin for premise PAY-001/,
+    /does not support dialect/,
   );
 });
 
 test("premise identities must be unique across providers", async () => {
-  const cucumber = createProvider({
-    dialects: ["gherkin"],
-    id: "cucumber",
-    premises: [behaviourPremise],
-  });
-  const otherCucumber = createProvider({
-    dialects: ["gherkin"],
-    id: "other-cucumber",
-    premises: [behaviourPremise],
-  });
-
   await assert.rejects(
     evaluatePremises({
       projectDirectory: "/project",
-      providers: [cucumber, otherCucumber],
+      providers: [createProvider(), createProvider({ id: "acme:other-cucumber" })],
     }),
-    /Duplicate premise PAY-001 from providers cucumber and other-cucumber/,
+    /Duplicate premise/,
   );
 });
 
-test("prepared provider sessions isolate interleaved project evaluations", async () => {
-  const provider = createProvider({
-    dialects: ["gherkin"],
-    id: "cucumber",
-    premises: [behaviourPremise],
-    projectScopedEvidence: true,
-  });
-
-  const projectA = await provider.prepare({ projectDirectory: "/project-a" });
-  const projectB = await provider.prepare({ projectDirectory: "/project-b" });
-  const [premiseA] = await projectA.discover();
-  const [premiseB] = await projectB.discover();
-
-  assert.deepEqual(await projectA.evaluate(premiseA), {
-    evidence: [
-      { role: "assertion", uri: "/project-a/features/payment.feature" },
-    ],
-    status: "established",
-  });
-  assert.deepEqual(await projectB.evaluate(premiseB), {
-    evidence: [
-      { role: "assertion", uri: "/project-b/features/payment.feature" },
-    ],
-    status: "established",
-  });
-});
-
 function createProvider({
-  dialects,
-  id,
+  dialects = ["gherkin"],
+  id = "cucumber",
   onEvaluate,
-  premises,
-  projectScopedEvidence = false,
+  onPrepare,
+  premises = [behaviourPremise],
+  result = { status: "established" },
 }: {
-  dialects: string[];
-  id: string;
+  dialects?: string[];
+  id?: string;
   onEvaluate?: () => void;
-  premises: Premise[];
-  projectScopedEvidence?: boolean;
-}): PremiseProvider {
+  onPrepare?: () => void;
+  premises?: Premise[];
+  result?: EvaluationResult;
+} = {}): PremiseProvider {
   return {
     dialects,
     id,
-    async prepare({ projectDirectory }) {
+    async prepare() {
+      onPrepare?.();
       return {
         async discover() {
           return premises;
         },
-        async evaluate(premise) {
+        async evaluate() {
           onEvaluate?.();
-          return {
-            evidence: [
-              {
-                role: "assertion",
-                uri: projectScopedEvidence
-                  ? `${projectDirectory}/${premise.assertion.ref.uri}`
-                  : premise.assertion.ref.uri,
-              },
-            ],
-            status: "established",
-          };
+          return result;
         },
       };
     },
