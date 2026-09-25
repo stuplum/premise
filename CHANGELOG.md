@@ -14,6 +14,8 @@
   nodes without executable scenarios.
 - Evaluates multiple premises in one feature independently, with selector-scoped
   dry runs, outcomes and coverage evidence including shared backgrounds.
+- Clarifies repository-owned premise identity and provider-owned metadata
+  binding, with native and sidecar OpenAPI examples using the existing API.
 
 ## 0.1.1 - 2026-09-24
 

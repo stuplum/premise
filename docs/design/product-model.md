@@ -139,6 +139,138 @@ export type EvaluationResult =
 Provider-specific concepts should not leak into dependency propagation, context
 retrieval, or invalidation logic owned by the core.
 
+## Identity belongs to the repository
+
+`discover()` returns complete, explicitly identified premises, not every native
+assertion a tool can enumerate. Repository authors own stable premise IDs and
+the choice of which assertions represent repository knowledge. Providers own
+dialect interpretation and the translation from native metadata or explicit
+bindings into `Premise`. The core validates the resulting identities; it does
+not assign them.
+
+Three things remain distinct:
+
+- A native definition, such as an OpenAPI schema, exists without a Premise ID.
+- A premise binds a repository-owned ID to an assertion reference and describes
+  the claim that should be evaluated.
+- An execution evaluates that claim in a project-scoped session. Its result
+  and evidence are not a new premise identity.
+
+A provider may enumerate native definitions internally before applying bindings.
+An unbound definition is not automatically a premise. In particular, an
+`operationId`, schema name, filename or JSON Pointer is a locator, not an
+implicit stable knowledge ID. Moving or renaming the definition requires
+updating its binding, not changing the premise ID.
+
+### Metadata sources
+
+Use native metadata when it expresses the intended value. Gherkin stable tags
+and dependency-cruiser rule names already serve as explicit IDs by their
+provider conventions; no sidecar is required for them. A native description
+can supply the premise description, and a provider may derive the premise type
+from the kind of claim it evaluates.
+
+When identity cannot be expressed natively, a provider can read an explicit
+dialect extension or a provider-specific sidecar in its prepared session.
+The binding supplies only missing metadata. It must not force authors to
+maintain a second copy of native descriptions or assertion definitions.
+
+A provider must diagnose a configured binding whose target is missing or
+ambiguous, missing required metadata, and conflicting native/sidecar values.
+It must not silently choose between competing IDs or generate one from a
+native name. The core's existing duplicate-ID check still applies across
+providers. Selector validity remains the provider's responsibility.
+
+The existing untagged-Cucumber `cucumber:<uri>` identity is an execution-only
+compatibility convention, not a model for assigning stable repository
+knowledge IDs to new dialects.
+
+### Concrete OpenAPI binding
+
+The following is a proposed OpenAPI provider convention, not a bundled
+provider or a supported Premise configuration file. Both variants fit the
+current `discover(): Promise<readonly Premise[]>` contract.
+
+Suppose `openapi.json` contains this schema within an otherwise complete
+OpenAPI document:
+
+```json
+{
+  "components": {
+    "schemas": {
+      "Learner": {
+        "type": "object",
+        "description": "A learner has a stable string ID",
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string" }
+        }
+      }
+    }
+  }
+}
+```
+
+If the repository owns the document, it can add `"x-premise-id": "API-012"`
+to `Learner`. A schema-contract provider reads the explicit ID, derives
+`type: "contract"` from its evaluation semantics, and reuses `description`.
+The extension is the only additional metadata.
+
+For a generated or externally owned document, leave it unchanged and configure
+the provider with this sidecar binding instead:
+
+```json
+{
+  "premises": [
+    {
+      "id": "API-012",
+      "ref": {
+        "uri": "openapi.json",
+        "selector": "#/components/schemas/Learner"
+      }
+    }
+  ]
+}
+```
+
+Either variant discovers the same premise:
+
+```json
+{
+  "id": "API-012",
+  "type": "contract",
+  "description": "A learner has a stable string ID",
+  "assertion": {
+    "dialect": "openapi",
+    "ref": {
+      "uri": "openapi.json",
+      "selector": "#/components/schemas/Learner"
+    }
+  }
+}
+```
+
+The schema remains the assertion source. The sidecar supplies identity, not
+another schema or another copy of its description. If the schema has no useful
+description, the binding must provide one. A provider evaluating schema
+conformance would also need configured subjects or observations; merely
+resolving the schema does not establish the premise.
+
+### Why retain complete-premise discovery
+
+Returning native assertions from every provider would make the core own
+binding configuration and metadata precedence before a third dialect has
+demonstrated a shared need. A universal manifest would also duplicate metadata
+for dialects whose native conventions already suffice.
+
+Keep binding inside providers and retain the existing public API. The accepted
+cost is that sidecar formats and their diagnostics are provider-specific.
+Reconsider a shared binding API when implemented providers demonstrate common
+requirements that cannot be handled cleanly inside their sessions.
+
+This decision does not add OpenAPI execution, a universal manifest or a new
+`dependsOn` field to the runtime `Premise` contract.
+
 ## Evidence
 
 Providers may report the repository evidence involved in an evaluation:
