@@ -1,6 +1,6 @@
 # ADR 001: Treat a feature file as the requirement boundary
 
-- Status: Accepted
+- Status: Superseded by [ADR 002](002-selector-scoped-premise-evaluation.md) (2026-09-25)
 - Date: 2026-09-21
 
 ## Context
