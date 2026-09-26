@@ -64,6 +64,20 @@ Do not modify the repository.
 
 See [Getting started](docs/getting-started.md) for manual setup and CI integration.
 
+## Agent lifecycle integration
+
+Premise can run as part of an agent session rather than depend on the agent remembering to call a tool.
+
+* **OMP:** session orientation, a native `premise` tool, context on structured file operations, and a completion gate.
+* **Codex:** a bundled plugin with session-start, `apply_patch` context, and stop hooks.
+* **Claude Code:** a bundled plugin with session-start, `Read`/`Edit`/`Write` context, and stop hooks.
+* **Completion:** fresh executable evidence, current decision reviews, and preservation of decision records captured at session start.
+* **Jev:** optional advisory review. A concern, uncertainty, or unavailable service never becomes model approval that the agent must obtain.
+
+Repositories opt in with `premise.json`. Fixing the code does not clear a stale decision review: deliberately reaffirm the choice, or preserve the original and add a reviewed `Supersedes` replacement.
+
+See [Agent lifecycle setup](docs/getting-started.md#agent-lifecycle-integration) for installation, hook trust, runtime limits, and optional Jev configuration.
+
 ## Current support
 
 | Knowledge                | Assertion                | Evaluation             |

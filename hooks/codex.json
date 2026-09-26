@@ -1,0 +1,45 @@
+{
+  "description": "Premise main-session workflow. Review and trust these hooks before use; hooks are not a security boundary.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/dist/adapters/codex-launcher.js\" SessionStart || exit 2",
+            "timeout": 600,
+            "statusMessage": "Starting Premise session",
+            "additionalContextLimit": 2500
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "^apply_patch$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/dist/adapters/codex-launcher.js\" PreToolUse || exit 2",
+            "timeout": 600,
+            "statusMessage": "Loading related Premise context",
+            "additionalContextLimit": 2500
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/dist/adapters/codex-launcher.js\" Stop || exit 2",
+            "timeout": 600,
+            "statusMessage": "Checking Premise completion"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "premise",
+  "version": "0.1.1",
+  "description": "Executable premise checks, decision context, and reviewed decision history for coding-agent sessions.",
+  "author": {
+    "name": "stuplum"
+  },
+  "homepage": "https://github.com/stuplum/premise",
+  "repository": "https://github.com/stuplum/premise",
+  "license": "UNLICENSED",
+  "hooks": "./hooks/claude.json"
+}

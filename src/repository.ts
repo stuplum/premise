@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { lstat, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type {
   CucumberConfiguration,
@@ -19,7 +19,14 @@ export async function readConfiguration({
     content = await readFile(path, "utf8");
   } catch (error) {
     if (isMissingFile(error)) {
-      return { version: 1 };
+      try {
+        await lstat(path);
+      } catch (statError) {
+        if (isMissingFile(statError)) {
+          return { version: 1 };
+        }
+        throw statError;
+      }
     }
     throw error;
   }
@@ -40,11 +47,23 @@ function isPremiseConfiguration(value: unknown): value is PremiseConfiguration {
     return false;
   }
 
-  if (!hasOnlyKeys({ keys: ["version", "cucumber"], value })) {
+  if (!hasOnlyKeys({ keys: ["version", "cucumber", "jev"], value })) {
     return false;
   }
 
-  return value.cucumber === undefined || isCucumberConfiguration(value.cucumber);
+  return (
+    (value.cucumber === undefined || isCucumberConfiguration(value.cucumber)) &&
+    (value.jev === undefined || isJevConfiguration(value.jev))
+  );
+}
+
+function isJevConfiguration(value: unknown) {
+  return (
+    isRecord(value) &&
+    hasOnlyKeys({ keys: ["questions"], value }) &&
+    typeof value.questions === "string" &&
+    value.questions.trim().length > 0
+  );
 }
 
 function isCucumberConfiguration(value: unknown): value is CucumberConfiguration {

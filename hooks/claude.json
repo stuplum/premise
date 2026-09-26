@@ -1,0 +1,43 @@
+{
+  "description": "Premise main-session workflow. Review and trust these hooks before use; hooks are not a security boundary.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact|fork",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/adapters/claude-launcher.js\" SessionStart || exit 2",
+            "timeout": 600,
+            "statusMessage": "Starting Premise session"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Read|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/adapters/claude-launcher.js\" PreToolUse || exit 2",
+            "timeout": 600,
+            "statusMessage": "Loading related Premise context"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/adapters/claude-launcher.js\" Stop || exit 2",
+            "timeout": 600,
+            "statusMessage": "Checking Premise completion"
+          }
+        ]
+      }
+    ]
+  }
+}

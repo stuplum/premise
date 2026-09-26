@@ -92,7 +92,7 @@ After adoption, run `prompts/audit.md` with a fresh agent.
 
 ## Manual setup
 
-Premise does not require a configuration file for its default layout.
+The ordinary CLI does not require a configuration file for its default layout. Agent lifecycle enforcement requires an explicit `premise.json`.
 
 ### Gherkin
 
@@ -163,7 +163,182 @@ For example:
 
 Both `features` and `steps` accept one or more glob patterns.
 
-The current configuration format only configures Cucumber discovery.
+Configuration supports Cucumber discovery and optional Jev advice. Its presence also opts the repository into the agent lifecycle gate.
+
+## Agent lifecycle integration
+
+Install Premise as a development dependency, then create `premise.json` in the project root:
+
+```json
+{
+  "version": 1
+}
+```
+
+The adapters were exercised with OMP `18.3.2`, Codex `0.155.0`, and Claude Code `2.1.283` on macOS. Node.js 20+ must be available as `node` on `PATH`, including when OMP itself runs on Bun. The bundled Codex and Claude Code command hooks target POSIX shells.
+
+The workflow is:
+
+1. Start a session and capture the existing decision records.
+2. Inspect relevant premises and decisions while editing.
+3. Attempt completion. Premise evaluates the current repository automatically.
+4. Repair failed or unknown executable premises and reconsider stale decisions.
+5. Explicitly run `premise review DECISION-ID` if the existing choice remains justified. Otherwise preserve the original record, add a new decision with `Supersedes DECISION-ID`, and review the replacement.
+
+A review does not override an executable failure. Records captured at session start cannot be rewritten or removed during that session. Decisions added later are included in the next session's snapshot.
+
+The adapters are workflow enforcement, not a security boundary. Trust the repository and hook code: Cucumber steps and dependency-cruiser configurations execute local code. Disabled or modified hooks, operator interruption, host runtime limits, and tampered session state can bypass the workflow. Subagents do not receive an independent completion guarantee.
+
+### OMP
+
+From the project root, load the installed extension:
+
+```sh
+omp --extension ./node_modules/@stuplum/premise/dist/adapters/omp.js
+```
+
+The extension provides a native `premise` tool:
+
+```json
+{ "action": "context", "artifact": "src/catalog.ts" }
+```
+
+```json
+{ "action": "check" }
+```
+
+```json
+{ "action": "review", "decision": "QUERY-010" }
+```
+
+Structured file reads and writes receive related context automatically. Directory reads, URLs, shell commands, and edits without a structured file path need an explicit context request. The completion check runs regardless of whether the agent used that tool.
+
+Slow checks continue across bounded stop-hook waits instead of exceeding OMP's handler deadline. Repository fingerprints guard against edits made during evaluation or before consuming a completed result. In-flight work survives hidden hook continuations, but a genuine new user turn cancels it.
+
+Fingerprints include file contents, modes, and symlink referents, excluding `.git`, `node_modules`, and Premise's generated agent state. They are not atomic filesystem snapshots and do not freeze external services or installed dependency contents. Large trees incur full scans; filesystem errors block rather than count as successful verification.
+
+### Codex
+
+Keep the project-local Premise installation available. Codex copies plugins into its cache; the bundled dependency-free launcher resolves and runs the project's installed Premise rather than relying on npm dependencies being copied with the plugin.
+
+Add the installed package to a local marketplace in `.agents/plugins/marketplace.json`:
+
+```json
+{
+  "name": "premise-local",
+  "plugins": [
+    {
+      "name": "premise",
+      "source": {
+        "source": "local",
+        "path": "./node_modules/@stuplum/premise"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
+```
+
+From that project root:
+
+```sh
+codex plugin marketplace add .
+codex plugin add premise@premise-local
+codex
+```
+
+Review and trust the installed hooks before starting work. Do not routinely bypass hook trust. See the [Codex hook documentation](https://learn.chatgpt.com/docs/hooks) for the host's review and execution policy.
+
+The plugin supplies session orientation, adds context before structured `apply_patch` edits, and performs a fresh check on every stop. It does not infer artifact paths from arbitrary shell commands. Mechanical blockers continue to block on subsequent stop attempts; advice can request at most one extra response per genuine turn.
+
+The launcher fails closed after 550 seconds, before the bundled host hook's 600-second deadline. `PREMISE_CODEX_TIMEOUT_MS` may lower that budget to a positive integer no greater than `550000`. An exhausted budget is not successful verification. Do not lower the host timeout below the launcher's budget; longer-running suites require a different hook policy or the OMP integration.
+
+### Claude Code
+
+From the project root, load the installed plugin for the session:
+
+```sh
+claude --plugin-dir "$PWD/node_modules/@stuplum/premise"
+```
+
+Review and trust the package's hooks before use. The Claude manifest explicitly loads `hooks/claude.json`; the Codex manifest separately loads `hooks/codex.json`. There is no shared default `hooks/hooks.json`, which Claude would also load. Keep the project-local Premise installation available when loading a cached plugin: the dependency-free launcher resolves that installation rather than relying on npm dependencies in the cache.
+
+`SessionStart` supplies orientation and preserves the original snapshot on resume or compaction. `PreToolUse` supplies related context for `Read`, `Edit`, and `Write` using their structured `file_path`. Shell commands and `@` file references need an explicit `premise agent context` request. Context does not grant tool permission. If a valid file operation cannot obtain context because repository configuration is broken, it receives a warning so configuration can still be repaired.
+
+`Stop` reruns executable checks and blocks mechanical failures, stale reviews, changed decision history, and configuration errors. It does not bypass checks when `stop_hook_active` is true. Jev advice uses a non-error follow-up rather than a failed-check response, with unchanged findings deduplicated across attempts and turns.
+
+**Claude's continuation limit is not successful verification.** With the default limit in Claude Code `2.1.283`, eight consecutive stop-hook continuations are allowed; Claude overrides the ninth block and ends the turn even if Premise still fails. Premise does not change `CLAUDE_CODE_STOP_HOOK_BLOCK_CAP` or circumvent this host limit. Resolve the reported blockers and run another check before claiming completion. Operator interruption and API failures also fall outside the normal `Stop` path. See the [Claude hook reference](https://code.claude.com/docs/en/hooks#stop).
+
+The launcher fails closed after 550 seconds, before the bundled hook's 600-second deadline, and terminates its evaluation process group. `PREMISE_CLAUDE_TIMEOUT_MS` may lower that budget to a positive integer no greater than `550000`. A timeout is not successful verification. Do not lower the host timeout below the launcher's budget.
+
+### Optional Jev advice
+
+Add a questions file to `premise.json`:
+
+```json
+{
+  "version": 1,
+  "jev": {
+    "questions": "questions.json"
+  }
+}
+```
+
+For example, `questions.json`:
+
+```json
+{
+  "version": 1,
+  "model": "jev-1.13.0",
+  "thresholds": {
+    "established": 0.8,
+    "failed": 0.2
+  },
+  "contextPaths": [
+    "src/catalog.ts",
+    "features/query.feature"
+  ],
+  "questions": {
+    "REVIEW-001": {
+      "description": "The query decision remains justified",
+      "instructions": "Does the active query decision remain justified by the supplied requirements and implementation?",
+      "criteria": {
+        "true": "The choice is compatible with the requirements and implementation.",
+        "false": "The choice conflicts with the requirements or implementation."
+      }
+    }
+  }
+}
+```
+
+Set `TYPESAFE_AI_API_KEY` in the agent's environment. Enabling Jev sends the selected files, current decisions, and session-start decision contents to `https://api.typesafe.ai/v1/systemone`. Select that context deliberately and do not include secrets.
+
+Results are `supported`, `concern`, `uncertain`, or `unavailable`. Missing credentials, transport failures, timeouts, and unusable responses are unavailable advice, not mechanical failures. Invalid local question configuration or unreadable configured context must be repaired. No configured Jev review means no network request.
+
+### Session state and adapter protocol
+
+Ignore generated session and feedback state, but keep decision review receipts:
+
+```gitignore
+.premise/agent-sessions/
+.premise/agent-feedback/
+```
+
+Do not delete an active session's snapshot to reset decision history. Starting the same session again does not replace that snapshot.
+
+Adapters use these JSON commands:
+
+```sh
+premise agent start --session SESSION-ID
+premise agent context src/catalog.ts --session SESSION-ID
+premise agent stop --session SESSION-ID
+```
+
+A processed report exits zero even when its JSON `status` is `blocked`; consumers must inspect the report. Command/protocol errors exit non-zero. The ordinary `premise check` retains its existing non-zero failure behaviour for CI.
 
 ## Running Premise
 

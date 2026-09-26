@@ -40,6 +40,10 @@
       "types": "./dist/cucumber.d.ts",
       "default": "./dist/cucumber.js"
     },
+    "./omp": {
+      "types": "./dist/adapters/omp.d.ts",
+      "default": "./dist/adapters/omp.js"
+    },
     "./package.json": "./package.json"
   },
   "bin": {
@@ -48,10 +52,16 @@
   "files": [
     "dist",
     "grammar",
+    "hooks",
+    ".codex-plugin",
+    ".claude-plugin",
     "docs",
     "prompts",
     "CHANGELOG.md"
   ],
+  "omp": {
+    "extensions": ["./dist/adapters/omp.js"]
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "check:premise": "node dist/cli.js check",
