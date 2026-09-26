@@ -179,7 +179,7 @@ The adapters were exercised with OMP `18.3.2`, Codex `0.155.0`, and Claude Code 
 
 The workflow is:
 
-1. Start a session and capture the existing decision records.
+1. Follow the [OMP](#omp), [Codex](#codex), or [Claude Code](#claude-code) setup below, then launch your agent from the project root with the Premise integration loaded and its hooks enabled and trusted. Its session-start hook automatically snapshots the existing `.decision` files in `.premise/agent-sessions/` before you make changes. You do not need to run a separate capture command or choose a session ID.
 2. Inspect relevant premises and decisions while editing.
 3. Attempt completion. Premise evaluates the current repository automatically.
 4. Repair failed or unknown executable premises and reconsider stale decisions.
