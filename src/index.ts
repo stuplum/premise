@@ -1,4 +1,4 @@
-export { runAgentContext, runAgentStart, runAgentStop } from "./agent-lifecycle.js";
+export { runAgentContexts, runAgentStart, runAgentStop } from "./agent-lifecycle.js";
 export type {
   AgentAdvisory,
   AgentBlocker,

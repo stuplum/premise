@@ -3,8 +3,8 @@
 import { realpath } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { isAbsolute, resolve } from "node:path";
-import { runAgentContext, runAgentStart, runAgentStop } from "../agent-lifecycle.js";
-import { agentSessionEnabled, resolveAgentProject } from "../agent-project.js";
+import { runAgentContexts, runAgentStart, runAgentStop } from "../agent-lifecycle.js";
+import { agentSessionEnabled, resolveHookProject } from "../agent-project.js";
 import {
   adapterError,
   agentOrientation,
@@ -41,7 +41,7 @@ type HookOutput = {
 export async function handleClaudeHook(value: unknown, expectedEvent?: string): Promise<HookOutput> {
   const event = parseHookInput(value, expectedEvent);
   const input = {
-    projectDirectory: await resolveAgentProject(event.cwd),
+    projectDirectory: await resolveHookProject({ host: "claude", cwd: event.cwd }),
     sessionId: event.session_id,
   };
   if (event.hook_event_name === "SessionStart") {
@@ -95,7 +95,7 @@ export async function handleClaudeHook(value: unknown, expectedEvent?: string): 
     return {};
   }
   try {
-    const projection = await runAgentContext({ ...input, artifact });
+    const [projection] = await runAgentContexts({ ...input, artifacts: [artifact] });
     const rendered = renderArtifactContext(projection);
     return rendered
       ? {

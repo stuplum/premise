@@ -187,6 +187,8 @@ The workflow is:
 
 A review does not override an executable failure. Records captured at session start cannot be rewritten or removed during that session. Decisions added later are included in the next session's snapshot.
 
+Completion checks fingerprint repository inputs before evaluation and after decision checks and Jev advice. A passing evaluation is rejected if those inputs changed while the check was running.
+
 The adapters are workflow enforcement, not a security boundary. Trust the repository and hook code: Cucumber steps and dependency-cruiser configurations execute local code. Disabled or modified hooks, operator interruption, host runtime limits, and tampered session state can bypass the workflow. Subagents do not receive an independent completion guarantee.
 
 ### OMP
@@ -213,9 +215,9 @@ The extension provides a native `premise` tool:
 
 Structured file reads and writes receive related context automatically. Directory reads, URLs, shell commands, and edits without a structured file path need an explicit context request. The completion check runs regardless of whether the agent used that tool.
 
-Slow checks continue across bounded stop-hook waits instead of exceeding OMP's handler deadline. Repository fingerprints guard against edits made during evaluation or before consuming a completed result. In-flight work survives hidden hook continuations, but a genuine new user turn cancels it.
+Slow checks continue across bounded stop-hook waits instead of exceeding OMP's handler deadline. Completed verification is retained for the next retry, with filesystem watching and metadata checks rejecting later mutations before the result is consumed. In-flight work survives hidden hook continuations, but a genuine new user turn cancels it.
 
-Fingerprints include file contents, modes, and symlink referents, excluding `.git`, `node_modules`, and Premise's generated agent state. They are not atomic filesystem snapshots and do not freeze external services or installed dependency contents. Large trees incur full scans; filesystem errors block rather than count as successful verification.
+Fingerprints include file contents, modes, and symlink referents, excluding `.git`, `node_modules`, Premise's generated agent state, and configured Cucumber report outputs. Reports are still generated; output paths that overlap executable inputs block completion, including symlink aliases. Fingerprints are not atomic filesystem snapshots and do not freeze external services or installed dependency contents. Large trees incur full scans; filesystem errors block rather than count as successful verification.
 
 ### Codex
 
@@ -253,7 +255,7 @@ codex
 
 Review and trust the installed hooks before starting work. Do not routinely bypass hook trust. See the [Codex hook documentation](https://learn.chatgpt.com/docs/hooks) for the host's review and execution policy.
 
-The plugin supplies session orientation, adds context before structured `apply_patch` edits, and performs a fresh check on every stop. It does not infer artifact paths from arbitrary shell commands. Mechanical blockers continue to block on subsequent stop attempts; advice can request at most one extra response per genuine turn.
+The plugin supplies session orientation, adds context before structured `apply_patch` edits, and performs a fresh check on every stop. All files in one patch receive context from a single executable evaluation. If a valid patch cannot obtain context because repository configuration is broken, it receives a warning rather than a denial, allowing configuration repairs; completion remains blocked until the configuration is repaired. The plugin does not infer artifact paths from arbitrary shell commands. Mechanical blockers continue to block on subsequent stop attempts; advice can request at most one extra response per genuine turn.
 
 The launcher fails closed after 550 seconds, before the bundled host hook's 600-second deadline. `PREMISE_CODEX_TIMEOUT_MS` may lower that budget to a positive integer no greater than `550000`. An exhausted budget is not successful verification. Do not lower the host timeout below the launcher's budget; longer-running suites require a different hook policy or the OMP integration.
 
@@ -268,6 +270,8 @@ claude --plugin-dir "$PWD/node_modules/@stuplum/premise"
 Review and trust the package's hooks before use. The Claude manifest explicitly loads `hooks/claude.json`; the Codex manifest separately loads `hooks/codex.json`. There is no shared default `hooks/hooks.json`, which Claude would also load. Keep the project-local Premise installation available when loading a cached plugin: the dependency-free launcher resolves that installation rather than relying on npm dependencies in the cache.
 
 `SessionStart` supplies orientation and preserves the original snapshot on resume or compaction. `PreToolUse` supplies related context for `Read`, `Edit`, and `Write` using their structured `file_path`. Shell commands and `@` file references need an explicit `premise agent context` request. Context does not grant tool permission. If a valid file operation cannot obtain context because repository configuration is broken, it receives a warning so configuration can still be repaired.
+
+The launcher and hooks use Claude's `CLAUDE_PROJECT_DIR` to retain the original project when the working directory changes. Relative artifact paths still resolve from the event's working directory. Start a new Claude session to switch projects.
 
 `Stop` reruns executable checks and blocks mechanical failures, stale reviews, changed decision history, and configuration errors. It does not bypass checks when `stop_hook_active` is true. Jev advice uses a non-error follow-up rather than a failed-check response, with unchanged findings deduplicated across attempts and turns.
 

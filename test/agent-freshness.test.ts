@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { test } from "node:test";
-import { runAgentContext, runAgentStart, runAgentStop } from "../src/agent-lifecycle.js";
+import { runAgentContexts, runAgentStart, runAgentStop } from "../src/agent-lifecycle.js";
+import { createProject, originalImplementation } from "./lifecycle-fixture.js";
 
 for (const extension of ["js", "cjs"]) {
   test(`agent evaluations reload ${extension} architecture rules and their imports in one process`, async (t) => {
@@ -46,7 +48,7 @@ for (const extension of ["js", "cjs"]) {
     assert.equal((await runAgentStart(input)).status, "ready");
     assert.equal((await runAgentStop(input)).status, "passed");
     const state = async () => {
-      const context = await runAgentContext({ ...input, artifact: "src/domain.js" });
+      const [context] = await runAgentContexts({ ...input, artifacts: ["src/domain.js"] });
       const premise = context.knowledge.find(({ id }) => id === "ARCH-001");
       assert.ok(premise);
       assert.equal(premise.source.selector, "ARCH-001");
@@ -79,7 +81,7 @@ for (const extension of ["js", "cjs"]) {
     assert.equal(invalid.status, "blocked");
     assert.ok(invalid.blockers.some(({ kind }) => kind === "evaluation"));
     await assert.rejects(
-      runAgentContext({ ...input, artifact: "src/domain.js" }),
+      runAgentContexts({ ...input, artifacts: ["src/domain.js"] }),
       /architecture configuration is broken/,
     );
 
@@ -88,3 +90,66 @@ for (const extension of ["js", "cjs"]) {
     assert.equal(await state(), "established");
   });
 }
+
+for (const host of ["codex", "claude"]) {
+  test(`${host} blocks completion when executable evidence changes its inputs after passing`, async (t) => {
+    const project = await createProject({ t });
+    const steps = await project.read("features/step_definitions/query.steps.ts");
+    const brokenImplementation = "export function queryProducts() { return []; }\n";
+    await project.write({
+      path: "features/step_definitions/query.steps.ts",
+      content: [
+        'import assert from "node:assert/strict";',
+        'import { writeFile } from "node:fs/promises";',
+        'import { Then } from "@stuplum/premise/cucumber";',
+        'import { queryProducts } from "../../src/catalog.ts";',
+        'Then("the query returns every product", async () => {',
+        '  assert.deepEqual(queryProducts().map(product => product.name).sort(), ["Apple", "Pear"]);',
+        `  await writeFile(new URL("../../src/catalog.ts", import.meta.url), ${JSON.stringify(brokenImplementation)});`,
+        '});',
+        '',
+      ].join("\n"),
+    });
+    const executable = resolve(`dist/adapters/${host}-launcher.js`);
+    const environment = {
+      ...Object.fromEntries(Object.entries(process.env).filter(([key]) => key !== "TYPESAFE_AI_API_KEY" && key !== "NODE_OPTIONS")),
+      CLAUDE_PROJECT_DIR: project.projectDirectory,
+    };
+    const call = (event: "SessionStart" | "Stop") => {
+      const result = spawnSync(process.execPath, [executable, event], {
+        cwd: project.projectDirectory,
+        env: environment,
+        encoding: "utf8",
+        input: JSON.stringify({ cwd: project.projectDirectory, session_id: "changed-evidence", hook_event_name: event, stop_hook_active: false }),
+        timeout: 30_000,
+      });
+      assert.ifError(result.error);
+      assert.equal(result.status, 0, result.stderr);
+      return JSON.parse(result.stdout) as { decision?: string };
+    };
+    call("SessionStart");
+
+    const result = call("Stop");
+
+    assert.equal(await project.read("src/catalog.ts"), brokenImplementation);
+    assert.equal(result.decision, "block");
+    await project.write({ path: "features/step_definitions/query.steps.ts", content: steps });
+    await project.write({ path: "src/catalog.ts", content: originalImplementation });
+    assert.equal(call("Stop").decision, undefined);
+  });
+}
+
+test("declared Cucumber reports cannot hide changes to an executed implementation", async (t) => {
+  const project = await createProject({ t });
+  await project.write({
+    path: "cucumber.cjs",
+    content: 'module.exports = { default: { format: process.argv.includes("--dry-run") ? [] : ["json:src/catalog.ts"] } };\n',
+  });
+  project.agent({ action: "start" });
+
+  const result = project.agent({ action: "stop" });
+
+  assert.notEqual(await project.read("src/catalog.ts"), originalImplementation);
+  assert.equal(result.status, "blocked");
+  assert.ok(result.blockers.some(({ message }) => message.includes("src/catalog.ts")));
+});

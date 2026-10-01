@@ -9,7 +9,8 @@ import {
 } from "../agent-feedback.js";
 import type { ArtifactContextProjection } from "../context-projection.js";
 import { renderArtifactContext } from "../context-renderer.js";
-import { evaluateOmpCheck, repositoryFingerprint, runOmpCommand, type OmpCheckedReport } from "./omp-check.js";
+import type { RepositoryVerification } from "../repository-snapshot.js";
+import { evaluateOmpCheck, runOmpCommand, type OmpCheckedReport } from "./omp-check.js";
 
 type ExtensionContext = {
   cwd: string;
@@ -45,7 +46,8 @@ type PendingCheck = {
   controller: AbortController;
   result: Promise<OmpCheckedReport>;
   finished: boolean;
-  verification?: Promise<string>;
+  verification?: Promise<RepositoryVerification>;
+  verified?: RepositoryVerification;
 };
 type Session = {
   input: AgentSessionInput;
@@ -119,6 +121,21 @@ export default function premiseExtension(omp: ExtensionAPI): void {
     return session.pending;
   }
 
+  function disposePending(pending: PendingCheck, abort: boolean): void {
+    pending.verified?.dispose();
+    void pending.verification?.then((verification) => verification.dispose(), () => undefined);
+    if (abort) {
+      pending.controller.abort();
+    }
+  }
+
+  function clearPending(session: Session, pending: PendingCheck, abort: boolean): void {
+    if (session.pending === pending) {
+      session.pending = undefined;
+    }
+    disposePending(pending, abort);
+  }
+
   async function currentReport(session: Session, pending: PendingCheck) {
     const awaitingEvaluation = !pending.finished;
     const checked = await pending.result;
@@ -128,21 +145,28 @@ export default function premiseExtension(omp: ExtensionAPI): void {
     if (checked.report.status === "inactive") {
       return { session, pending, report: checked.report, current: !await agentSessionEnabled(session.input) };
     }
-    let fingerprint = awaitingEvaluation ? checked.fingerprint : undefined;
-    if (!awaitingEvaluation && checked.fingerprint) {
-      pending.verification ??= repositoryFingerprint(session.input.projectDirectory, pending.controller.signal)
-        .finally(() => { pending.verification = undefined; });
-      fingerprint = await pending.verification;
+    let current = awaitingEvaluation && checked.fingerprint !== undefined;
+    if (!awaitingEvaluation && checked.fingerprint && checked.snapshot) {
+      pending.verification ??= checked.snapshot
+        .verify(pending.controller.signal)
+        .then((verification) => {
+          pending.verified = verification;
+          return verification;
+        });
+      const verification = await pending.verification;
+      current =
+        verification.fingerprint === checked.fingerprint &&
+        (await verification.current(pending.controller.signal));
     }
     if (session.pending !== pending || disposed) {
       throw new Error("The Premise completion check belongs to an interrupted turn; retry completion");
     }
-    return { session, pending, report: checked.report, current: fingerprint !== undefined && fingerprint === checked.fingerprint };
+    return { session, pending, report: checked.report, current };
   }
 
   function changedTree(session: Session, pending: PendingCheck, signal?: AbortSignal): string {
     if (session.pending === pending) {
-      session.pending = undefined;
+      clearPending(session, pending, true);
       pendingCheck(session, signal);
     }
     return "Premise: blocked. Repository content changed during or after evaluation. A fresh check is running for the current tree; wait for it and retry completion without changing files.";
@@ -163,13 +187,24 @@ export default function premiseExtension(omp: ExtensionAPI): void {
 
   omp.on("session_shutdown", async () => {
     disposed = true;
+    const pendingVerifications: Promise<unknown>[] = [];
     for (const session of sessions.values()) {
-      session.pending?.controller.abort();
+      if (session.pending) {
+        if (session.pending.verification) {
+          pendingVerifications.push(
+            session.pending.verification.catch(() => undefined),
+          );
+        }
+        disposePending(session.pending, true);
+      }
       for (const controller of session.operations) {
         controller.abort();
       }
     }
-    await Promise.all([...sessions.values()].map((session) => session.work));
+    await Promise.all([
+      ...[...sessions.values()].map((session) => session.work),
+      ...pendingVerifications,
+    ]);
     sessions.clear();
   });
 
@@ -184,7 +219,9 @@ export default function premiseExtension(omp: ExtensionAPI): void {
     if (previous) {
       previous.turn++;
       previous.adviceDelivered = false;
-      previous.pending?.controller.abort();
+      if (previous.pending) {
+        disposePending(previous.pending, true);
+      }
       previous.pending = undefined;
       for (const controller of previous.operations) {
         controller.abort();
@@ -262,13 +299,13 @@ export default function premiseExtension(omp: ExtensionAPI): void {
         if (!checked.current) {
           return { content: [{ type: "text", text: changedTree(session, pending, signal) }], isError: true };
         }
-        session.pending = undefined;
+        clearPending(session, pending, false);
         const report = checked.report;
         session.adviceDelivered ||= report.advisories.length > 0;
         return { content: [{ type: "text", text: renderAgentReport(report) }], details: report };
       } catch (error) {
         if (session && pending && session.pending === pending) {
-          session.pending = undefined;
+          clearPending(session, pending, true);
         }
         return { content: [{ type: "text", text: adapterError(error) }], isError: true };
       } finally {
@@ -337,7 +374,7 @@ export default function premiseExtension(omp: ExtensionAPI): void {
       return currentReport(session, pending);
     })().catch((error: unknown) => {
       if (session && pending && session.pending === pending) {
-        session.pending = undefined;
+        clearPending(session, pending, true);
       }
       return { blocked: adapterError(error) };
     });
@@ -349,7 +386,7 @@ export default function premiseExtension(omp: ExtensionAPI): void {
       if (!result.current) {
         return { decision: "block", reason: changedTree(result.session, result.pending, event.signal) };
       }
-      result.session.pending = undefined;
+      clearPending(result.session, result.pending, false);
       const report = result.report;
       const feedback = renderAgentReport(report);
       const advisoryFollowUp = report.advisories.length > 0 && !result.session.adviceDelivered;

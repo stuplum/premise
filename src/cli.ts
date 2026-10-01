@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { runAgentContext, runAgentStart, runAgentStop } from "./agent-lifecycle.js";
+import { runAgentContexts, runAgentStart, runAgentStop } from "./agent-lifecycle.js";
 import { runExecutableRequirements } from "./executable-requirements.js";
 import { projectArtifactContext } from "./context-projection.js";
 import { renderArtifactContext } from "./context-renderer.js";
@@ -74,7 +74,7 @@ async function runAgent({
   }
   const input = { projectDirectory, sessionId };
   const report = context
-    ? await runAgentContext({ ...input, artifact: arguments_[0] })
+    ? (await runAgentContexts({ ...input, artifacts: [arguments_[0]] }))[0]
     : action === "start"
       ? await runAgentStart(input)
       : await runAgentStop(input);

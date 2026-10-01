@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { dirname, isAbsolute, join } from "node:path";
-import { agentSessionEnabled, resolveAgentProject } from "../agent-project.js";
+import { agentSessionEnabled, resolveHookProject } from "../agent-project.js";
 
 type HookHost = "codex" | "claude";
 
@@ -39,7 +39,7 @@ async function launch(host: HookHost): Promise<void> {
       !["SessionStart", "PreToolUse", "Stop"].includes(event ?? "") || input.hook_event_name !== event) {
     throw new Error(`Invalid ${label} hook identity or working directory`);
   }
-  const projectDirectory = await resolveAgentProject(input.cwd);
+  const projectDirectory = await resolveHookProject({ host, cwd: input.cwd });
   let packagePath: string;
   try {
     packagePath = createRequire(join(projectDirectory, "package.json")).resolve("@stuplum/premise/package.json");

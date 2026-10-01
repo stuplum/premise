@@ -20,7 +20,7 @@ async function cachedPlugin(t: TestContext) {
       cwd: projectDirectory,
       input: JSON.stringify({ cwd: projectDirectory, session_id: "claude-cached", hook_event_name: event, stop_hook_active: false }),
       encoding: "utf8",
-      env: { ...process.env, PREMISE_CLAUDE_TIMEOUT_MS: String(timeoutMs) },
+      env: { ...process.env, CLAUDE_PROJECT_DIR: projectDirectory, PREMISE_CLAUDE_TIMEOUT_MS: String(timeoutMs) },
       timeout: 30_000,
     });
     assert.ifError(result.error);

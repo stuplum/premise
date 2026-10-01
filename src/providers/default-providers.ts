@@ -4,11 +4,13 @@ import { createDependencyCruiserProvider } from "./dependency-cruiser-provider.j
 
 export function createDefaultProviders({
   silentCucumber = false,
+  assertInputs,
 }: {
   silentCucumber?: boolean;
+  assertInputs?: (paths: readonly string[]) => Promise<void>;
 } = {}): PremiseProvider[] {
   return [
-    createCucumberProvider({ allowEmpty: true, silent: silentCucumber }),
+    createCucumberProvider({ allowEmpty: true, silent: silentCucumber, assertInputs }),
     createDependencyCruiserProvider(),
   ];
 }

@@ -1,76 +1,17 @@
 import { spawn } from "node:child_process";
-import { createHash } from "node:crypto";
-import { lstat, open, readdir, readlink, realpath } from "node:fs/promises";
-import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AgentReport, AgentSessionInput } from "../agent-model.js";
 import { agentSessionEnabled } from "../agent-project.js";
+import {
+  createRepositorySnapshot,
+  type RepositorySnapshot,
+} from "../repository-snapshot.js";
 
-export type OmpCheckedReport = { report: AgentReport; fingerprint?: string };
-
-export async function repositoryFingerprint(projectDirectory: string, signal: AbortSignal): Promise<string> {
-  const hash = createHash("sha256");
-  const buffer = Buffer.allocUnsafe(64 * 1024);
-  const ancestors = new Set<string>();
-  const excluded: Record<string, true> = { ".premise/agent-sessions": true, ".premise/agent-feedback": true };
-
-  async function visit(path: string, uri: string): Promise<void> {
-    signal.throwIfAborted();
-    const before = await lstat(path, { bigint: true });
-    signal.throwIfAborted();
-    hash.update(JSON.stringify([uri, Number(before.mode)]));
-    if (before.isSymbolicLink()) {
-      const target = await readlink(path);
-      hash.update(JSON.stringify(["link", target]));
-      await visit(await realpath(path), uri);
-    } else if (before.isDirectory()) {
-      const canonical = await realpath(path);
-      if (ancestors.has(canonical)) {
-        throw new Error(`Cannot fingerprint cyclic directory link at ${uri || "."}`);
-      }
-      ancestors.add(canonical);
-      try {
-        const names = (await readdir(path)).sort();
-        for (const name of names) {
-          const child = uri ? `${uri}/${name}` : name;
-          if (name !== ".git" && name !== "node_modules" && !Object.hasOwn(excluded, child)) {
-            await visit(join(path, name), child);
-          }
-        }
-      } finally {
-        ancestors.delete(canonical);
-      }
-    } else if (before.isFile()) {
-      hash.update(JSON.stringify(["file", before.size.toString()]));
-      const file = await open(path, "r");
-      try {
-        let position = 0;
-        while (true) {
-          signal.throwIfAborted();
-          const { bytesRead } = await file.read(buffer, 0, buffer.length, position);
-          if (bytesRead === 0) {
-            break;
-          }
-          hash.update(buffer.subarray(0, bytesRead));
-          position += bytesRead;
-        }
-      } finally {
-        await file.close();
-      }
-    } else {
-      throw new Error(`Cannot fingerprint non-regular repository entry ${uri}`);
-    }
-    const after = await lstat(path, { bigint: true });
-    if (before.ino !== after.ino || before.mode !== after.mode || before.size !== after.size ||
-      before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs) {
-      throw new Error(`Repository changed while fingerprinting ${uri || "."}; wait for writes to finish and retry completion`);
-    }
-    signal.throwIfAborted();
-  }
-
-  await visit(projectDirectory, "");
-  return hash.digest("hex");
-}
+export type OmpCheckedReport = {
+  report: AgentReport;
+  fingerprint?: string;
+  snapshot?: RepositorySnapshot;
+};
 
 export async function runOmpCommand(input: AgentSessionInput, arguments_: string[], signal: AbortSignal): Promise<string> {
   signal.throwIfAborted();
@@ -154,12 +95,17 @@ export async function evaluateOmpCheck(input: AgentSessionInput, signal: AbortSi
   if (!await agentSessionEnabled(input)) {
     return { report: { status: "inactive", blockers: [], advisories: [] } };
   }
-  const before = await repositoryFingerprint(input.projectDirectory, signal);
+  const snapshot = await createRepositorySnapshot(input.projectDirectory, signal);
+  const before = await snapshot.fingerprint(signal);
   const output = await runOmpCommand(input, ["agent", "stop", "--session", input.sessionId], signal);
   const report: AgentReport = JSON.parse(output);
   if (!["passed", "blocked", "inactive"].includes(report.status) || !Array.isArray(report.blockers) || !Array.isArray(report.advisories)) {
     throw new Error("Premise evaluator returned an invalid completion report; check the installed Premise CLI");
   }
-  const after = await repositoryFingerprint(input.projectDirectory, signal);
-  return { report, ...(before === after ? { fingerprint: after } : {}) };
+  const after = await snapshot.fingerprint(signal);
+  return {
+    report,
+    snapshot,
+    ...(before === after ? { fingerprint: after } : {}),
+  };
 }

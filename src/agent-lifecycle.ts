@@ -24,6 +24,7 @@ import { reviewWithJev } from "./jev-review.js";
 import { evaluatePremises, type PremiseEvaluation } from "./provider.js";
 import { createDefaultProviders } from "./providers/default-providers.js";
 import { readConfiguration } from "./repository.js";
+import { createRepositorySnapshot, type RepositorySnapshot } from "./repository-snapshot.js";
 
 const premiseCommand = `node ${quoteShellArgument(fileURLToPath(new URL("./cli.js", import.meta.url)))}`;
 
@@ -114,13 +115,22 @@ export async function runAgentStop(input: AgentSessionInput): Promise<AgentRepor
     blockers.push(missingConfiguration());
   }
   let evaluations: PremiseEvaluation[] | undefined;
+  const fingerprintSignal = new AbortController().signal;
+  let fingerprint: string | undefined;
+  let snapshot: RepositorySnapshot | undefined;
   if (configured) {
     try {
       await readConfiguration(resolved);
+      snapshot = await createRepositorySnapshot(resolved.projectDirectory, fingerprintSignal);
+      fingerprint = await snapshot.fingerprint(fingerprintSignal);
       evaluations = await evaluatePremises({
         projectDirectory: resolved.projectDirectory,
-        providers: createDefaultProviders({ silentCucumber: true }),
+        providers: createDefaultProviders({ silentCucumber: true, assertInputs: snapshot.assertInputs }),
       });
+      await snapshot.assertInputs(evaluations.flatMap(({ premise, result }) => [
+        premise.assertion.ref.uri,
+        ...("evidence" in result ? result.evidence ?? [] : []).map(({ uri }) => uri),
+      ]));
       for (const { premise, provider, result } of evaluations) {
         if (result.status === "established") {
           continue;
@@ -177,13 +187,29 @@ export async function runAgentStop(input: AgentSessionInput): Promise<AgentRepor
   } catch (error) {
     blockers.push({ kind: "evaluation", source: { uri: "premise.json" }, message: `Cannot load Jev advisory configuration: ${errorMessage(error)}. Repair the local configuration. Jev advice does not replace executable evidence.` });
   }
+  if (snapshot && fingerprint !== undefined) {
+    try {
+      if (fingerprint !== await snapshot.fingerprint(fingerprintSignal)) {
+        blockers.push({
+          kind: "evaluation",
+          message: "Repository inputs changed during completion evaluation. Retry the check against the current inputs before claiming verification.",
+        });
+      }
+    } catch (error) {
+      blockers.push({
+        kind: "evaluation",
+        message: `Cannot verify that completion evidence is current: ${errorMessage(error)}. Resolve the filesystem or configuration error and retry the check.`,
+      });
+    }
+  }
   return { status: blockers.length === 0 ? "passed" : "blocked", blockers, advisories };
 }
 
-export async function runAgentContext(
-  input: AgentSessionInput & { artifact: string },
-): Promise<ArtifactContextProjection> {
-  if (typeof input.artifact !== "string" || input.artifact.trim().length === 0) {
+export async function runAgentContexts(
+  input: AgentSessionInput & { artifacts: string[] },
+): Promise<ArtifactContextProjection[]> {
+  if (!Array.isArray(input.artifacts) || input.artifacts.length === 0 ||
+    input.artifacts.some((artifact) => typeof artifact !== "string" || artifact.trim().length === 0)) {
     throw new Error("An artifact path is required for agent context");
   }
   const resolved = await resolveAgentSessionInput(input);
@@ -199,11 +225,11 @@ export async function runAgentContext(
     projectDirectory: resolved.projectDirectory,
     providers: createDefaultProviders({ silentCucumber: true }),
   });
-  return projectArtifactContext({
-    artifact: input.artifact,
+  return Promise.all(input.artifacts.map((artifact) => projectArtifactContext({
+    artifact,
     evaluations,
     projectDirectory: resolved.projectDirectory,
-  });
+  })));
 }
 
 async function checkDecisionHistory(session: AgentSession): Promise<AgentBlocker[]> {

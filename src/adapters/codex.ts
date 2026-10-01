@@ -3,7 +3,7 @@
 import { realpath } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { isAbsolute, resolve } from "node:path";
-import { runAgentContext, runAgentStart, runAgentStop } from "../agent-lifecycle.js";
+import { runAgentContexts, runAgentStart, runAgentStop } from "../agent-lifecycle.js";
 import { agentSessionEnabled, resolveAgentProject } from "../agent-project.js";
 import {
   adapterError,
@@ -12,6 +12,7 @@ import {
   localArtifact,
   renderAgentReport,
 } from "../agent-feedback.js";
+import type { ArtifactContextProjection } from "../context-projection.js";
 import { renderArtifactContext } from "../context-renderer.js";
 
 type HookEventName = "SessionStart" | "Stop" | "PreToolUse";
@@ -81,17 +82,30 @@ export async function handleCodexHook(value: unknown, expectedEvent?: string): P
   if (!await agentSessionEnabled(input)) {
     return {};
   }
-  const contexts: string[] = [];
+  const artifacts = new Set<string>();
   for (const path of paths) {
     const artifact = await localArtifact({
       path,
       cwd: event.cwd,
       projectDirectory: input.projectDirectory,
     });
-    if (!artifact) {
-      continue;
+    if (artifact) {
+      artifacts.add(artifact);
     }
-    const projection = await runAgentContext({ ...input, artifact });
+  }
+  if (artifacts.size === 0) {
+    return {};
+  }
+  let projections: ArtifactContextProjection[];
+  try {
+    projections = await runAgentContexts({ ...input, artifacts: [...artifacts] });
+  } catch (error) {
+    return {
+      hookSpecificOutput: { hookEventName: "PreToolUse", additionalContext: adapterError(error) },
+    };
+  }
+  const contexts: string[] = [];
+  for (const projection of projections) {
     const rendered = renderArtifactContext(projection);
     if (rendered) {
       contexts.push(`Premise context for ${projection.artifact}:\n${rendered}`);

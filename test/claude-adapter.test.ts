@@ -18,18 +18,23 @@ type HookOutput = {
   };
 };
 
-function hook({ projectDirectory, event, fields = {}, raw, executable = adapter }: {
+function hook({ projectDirectory, event, fields = {}, raw, executable = adapter, environment = {} }: {
   projectDirectory: string;
   event: "SessionStart" | "PreToolUse" | "Stop";
   fields?: Record<string, unknown>;
   raw?: string;
   executable?: string;
+  environment?: NodeJS.ProcessEnv;
 }): HookOutput {
   const result = spawnSync(process.execPath, [executable, event], {
     cwd: projectDirectory,
     encoding: "utf8",
     input: raw ?? JSON.stringify({ cwd: projectDirectory, session_id: "claude-session", hook_event_name: event, stop_hook_active: false, ...fields }),
-    env: Object.fromEntries(Object.entries(process.env).filter(([key]) => key !== "TYPESAFE_AI_API_KEY" && key !== "NODE_OPTIONS")),
+    env: {
+      ...Object.fromEntries(Object.entries(process.env).filter(([key]) => key !== "TYPESAFE_AI_API_KEY" && key !== "NODE_OPTIONS")),
+      CLAUDE_PROJECT_DIR: projectDirectory,
+      ...environment,
+    },
     timeout: 30_000,
   });
   assert.ifError(result.error);
@@ -133,4 +138,18 @@ test("Claude permits configuration repairs while warning that context is unavail
   assert.match(context.hookSpecificOutput?.additionalContext ?? "", /could not complete/);
   await project.write({ path: "premise.json", content: '{"version":1}' });
   assert.equal(hook({ projectDirectory: project.projectDirectory, event: "Stop", fields: { stop_hook_active: true } }).decision, undefined);
+});
+
+test("Claude retains the original completion gate after changing to an unconfigured directory", async (t) => {
+  const project = await createProject({ t });
+  const elsewhere = await createProject({ t, configured: false });
+  const executable = resolve("dist/adapters/claude-launcher.js");
+  const environment = { CLAUDE_PROJECT_DIR: project.projectDirectory };
+  hook({ projectDirectory: project.projectDirectory, event: "SessionStart", executable, environment });
+  await project.write({ path: "src/catalog.ts", content: "export function queryProducts() { return []; }\n" });
+
+  const output = hook({ projectDirectory: elsewhere.projectDirectory, event: "Stop", executable, environment });
+
+  assert.equal(output.decision, "block");
+  assert.match(output.reason ?? "", /QUERY-001/);
 });
