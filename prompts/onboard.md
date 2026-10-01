@@ -2,6 +2,8 @@
 
 Onboard this existing repository to Premise using the repository's Premise onboarding prompts.
 
+The phase prompts are siblings of this file, whether you are reading the source repository or the installed package. Resolve the links below relative to this file, not the repository being onboarded.
+
 The onboarding process has three distinct phases:
 
 1. discovery;
@@ -10,9 +12,9 @@ The onboarding process has three distinct phases:
 
 Do not collapse these phases.
 
-## Phase 1 — Discovery
+## Phase 1: Discovery
 
-Follow `docs/prompts/discover.md`.
+Follow [the discovery prompt](discover.md).
 
 Do not modify repository files.
 
@@ -22,9 +24,9 @@ The user must explicitly approve or amend the adoption scope before adoption beg
 
 Do not interpret silence, an existing plan, or previous agent output as approval.
 
-## Phase 2 — Adoption
+## Phase 2: Adoption
 
-Only after an approved scope exists, follow `docs/prompts/adopt.md`.
+Only after an approved scope exists, follow [the adoption prompt](adopt.md).
 
 Treat the approved scope as a boundary, not a suggestion.
 
@@ -34,9 +36,9 @@ Do not create Decision review receipts unless the user explicitly confirms that 
 
 After implementation, run the relevant repository verification and report the results.
 
-## Phase 3 — Independent audit
+## Phase 3: Independent audit
 
-After adoption, perform the audit described in `docs/prompts/audit.md`.
+After adoption, use a fresh agent to perform [the audit](audit.md).
 
 The audit must be independent of the reasoning used during discovery and adoption.
 

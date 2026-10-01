@@ -32,9 +32,11 @@ const injectedTypeScriptConfigurationVariable =
 export function createCucumberProvider({
   allowEmpty = false,
   silent = false,
+  assertInputs,
 }: {
   allowEmpty?: boolean;
   silent?: boolean;
+  assertInputs?: (paths: readonly string[]) => Promise<void>;
 } = {}): PremiseProvider {
   return {
     dialects: ["gherkin"],
@@ -53,6 +55,7 @@ export function createCucumberProvider({
           return evaluateCucumberPremise({
             premise,
             project: discovery.project,
+            assertInputs,
           });
         },
       };
@@ -144,9 +147,11 @@ async function discoverCucumberPremises({
 async function evaluateCucumberPremise({
   premise,
   project,
+  assertInputs,
 }: {
   premise: Premise;
   project: CucumberProject;
+  assertInputs?: (paths: readonly string[]) => Promise<void>;
 }): Promise<EvaluationResult> {
   if (project.stepFiles.length === 0) {
     return {
@@ -197,6 +202,13 @@ async function evaluateCucumberPremise({
       silent: project.silent,
       typeScriptConfiguration: project.typeScriptConfiguration,
     });
+    const { artifacts, unreliableModulePaths, loadedArtifacts } = await collectExecutedArtifacts({
+      baselineCoverageDirectory,
+      coverageDirectory,
+      projectDirectory: project.projectDirectory,
+      stepFiles: project.stepFiles,
+    });
+    await assertInputs?.(loadedArtifacts);
     if (!premise.assertion.ref.selector) {
       if (exitCode !== 0) {
         return failedEvaluation({
@@ -213,12 +225,6 @@ async function evaluateCucumberPremise({
       };
     }
 
-    const { artifacts, unreliableModulePaths } = await collectExecutedArtifacts({
-      baselineCoverageDirectory,
-      coverageDirectory,
-      projectDirectory: project.projectDirectory,
-      stepFiles: project.stepFiles,
-    });
     for (const path of unreliableModulePaths) {
       warnAboutDynamicModule({
         path,

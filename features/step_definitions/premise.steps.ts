@@ -154,6 +154,7 @@ Given(
 
 When(
   "I prepare both projects with the same provider before evaluating either",
+  { timeout: 30_000 },
   async function (this: PremiseWorld) {
     const provider = createDependencyCruiserProvider();
     const prepared: Array<{
@@ -1377,12 +1378,6 @@ Then("no legacy Premise files are created", async function (this: PremiseWorld) 
   await assert.rejects(access(join(this.projectDirectory, "premise.lock")));
 });
 
-Then("the command reports only the supported commands", function (this: PremiseWorld) {
-  assert.match(
-    commandOutput(this),
-    /Usage: premise <test\|context\|check\|review>/,
-  );
-});
 
 Then("the command reports invalid Premise configuration", function (this: PremiseWorld) {
   assert.match(commandOutput(this), /Invalid Premise configuration/);

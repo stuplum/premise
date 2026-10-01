@@ -4,6 +4,8 @@ Premise includes a dependency-cruiser provider for executable architecture const
 
 A named forbidden dependency rule can become an architecture Premise.
 
+For first adoption, see [Getting started](../getting-started.md). For command behaviour and supported `premise.json` fields, see the [CLI and configuration reference](../reference.md). Return to the [documentation index](../README.md).
+
 ## Configuration discovery
 
 Premise looks for the first available file in this order:

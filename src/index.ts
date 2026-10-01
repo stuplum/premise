@@ -1,3 +1,10 @@
+export { runAgentContexts, runAgentStart, runAgentStop } from "./agent-lifecycle.js";
+export type {
+  AgentAdvisory,
+  AgentBlocker,
+  AgentReport,
+  AgentSessionInput,
+} from "./agent-model.js";
 export { calculateFingerprint } from "./fingerprint.js";
 export {
   createArtifactContextProjection,

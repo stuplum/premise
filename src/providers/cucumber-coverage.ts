@@ -50,10 +50,14 @@ export async function collectExecutedArtifacts({
   const steps = new Set(resolvedStepFiles);
   const artifacts = new Set<string>();
   const unreliableModulePaths = new Set<string>();
+  const loadedArtifacts = new Set<string>();
 
   for (const coverage of coverageFiles) {
     for (const script of coverage.result) {
       const path = await resolveCoveredFile({ coverage, url: script.url });
+      if (path) {
+        loadedArtifacts.add(path);
+      }
       if (
         !path ||
         steps.has(path) ||
@@ -79,6 +83,7 @@ export async function collectExecutedArtifacts({
   }
 
   return {
+    loadedArtifacts: [...loadedArtifacts],
     artifacts: [...artifacts].sort(),
     unreliableModulePaths: [...unreliableModulePaths].sort(),
   };

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Adds opt-in agent lifecycle checks with session-start decision snapshots,
+  current artifact context, and completion blocking until executable premises
+  and deliberate decision reviews are satisfied.
+- Adds OMP integration and Codex and Claude Code plugins with cached-installation
+  support, bounded hook waits, and protection against stale or interrupted checks.
+- Adds optional pinned-model Jev advice without turning model judgement or
+  service availability into executable evidence.
+- Reloads executable dependency-cruiser configuration and its imports in fresh
+  Node processes; rejects dangling repository configuration instead of silently
+  using defaults.
+
 - Reserves canonical provider, premise type, dialect, and evidence-role
   identifiers, with independent `namespace:name` extensions for third parties.
 - Rejects invalid registry identifiers before provider preparation, invalid

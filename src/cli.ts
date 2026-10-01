@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { runAgentContexts, runAgentStart, runAgentStop } from "./agent-lifecycle.js";
 import { runExecutableRequirements } from "./executable-requirements.js";
 import { projectArtifactContext } from "./context-projection.js";
 import { renderArtifactContext } from "./context-renderer.js";
@@ -28,6 +29,9 @@ async function run({
   const [command, ...commandArguments] = arguments_;
 
   switch (command) {
+    case "agent":
+      await runAgent({ commandArguments, projectDirectory });
+      return;
     case "test":
       requireNoArguments({ command, commandArguments });
       await runTests({ projectDirectory });
@@ -43,8 +47,38 @@ async function run({
       await runReview({ commandArguments, projectDirectory });
       return;
     default:
-      throw new Error("Usage: premise <test|context|check|review>");
+      throw new Error("Usage: premise <test|context|check|review|agent>");
   }
+}
+
+async function runAgent({
+  commandArguments,
+  projectDirectory,
+}: {
+  commandArguments: string[];
+  projectDirectory: string;
+}) {
+  const [action, ...arguments_] = commandArguments;
+  const context = action === "context";
+  const offset = context ? 1 : 0;
+  const sessionId = arguments_[offset + 1];
+  if (
+    (action !== "start" && action !== "stop" && !context) ||
+    arguments_.length !== offset + 2 ||
+    arguments_[offset] !== "--session" ||
+    !sessionId?.trim() ||
+    sessionId.startsWith("--") ||
+    (context && !arguments_[0]?.trim())
+  ) {
+    throw new Error("Usage: premise agent <start|stop> --session <id> | premise agent context <artifact> --session <id>");
+  }
+  const input = { projectDirectory, sessionId };
+  const report = context
+    ? (await runAgentContexts({ ...input, artifacts: [arguments_[0]] }))[0]
+    : action === "start"
+      ? await runAgentStart(input)
+      : await runAgentStop(input);
+  process.stdout.write(`${JSON.stringify(report)}\n`);
 }
 
 async function runCheck({ projectDirectory }: { projectDirectory: string }) {

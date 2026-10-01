@@ -5,5 +5,6 @@ export type CucumberConfiguration = {
 
 export type PremiseConfiguration = {
   cucumber?: CucumberConfiguration;
+  jev?: { questions: string };
   version: 1;
 };

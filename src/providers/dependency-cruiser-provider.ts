@@ -1,12 +1,16 @@
+import { spawn } from "node:child_process";
 import { access } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
-import {
-  cruise,
-  type ICruiseOptions,
-  type ICruiseResult,
-  type IForbiddenRuleType,
+import { fileURLToPath } from "node:url";
+import type {
+  ICruiseResult,
+  IForbiddenRuleType,
 } from "dependency-cruiser";
-import extractDependencyCruiserOptions from "dependency-cruiser/config-utl/extract-depcruise-options";
+import type {
+  DependencyCruiserOptions,
+  DependencyCruiserRequest,
+  DependencyCruiserResponse,
+} from "./dependency-cruiser-worker.js";
 import type {
   EvaluationContext,
   EvaluationResult,
@@ -85,7 +89,14 @@ async function discoverArchitecturePremises({
     };
   }
 
-  const options = await extractDependencyCruiserOptions(configPath);
+  const extracted = await runDependencyCruiserWorker({
+    request: { configPath },
+    projectDirectory: context.projectDirectory,
+  });
+  if (!("options" in extracted)) {
+    throw new Error("dependency-cruiser returned an unexpected configuration");
+  }
+  const options = extracted.options;
   const configUri = normalizeProjectPath({
     path: configPath,
     projectDirectory: context.projectDirectory,
@@ -113,7 +124,7 @@ function architectureRules({
   options,
 }: {
   configUri: string;
-  options: ICruiseOptions;
+  options: DependencyCruiserOptions;
 }) {
   const rules = new Map<string, ArchitectureRule>();
   for (const rule of options.ruleSet?.forbidden ?? []) {
@@ -154,20 +165,76 @@ async function runDependencyCruiser({
   projectDirectory,
   sourcePaths,
 }: {
-  options: ICruiseOptions;
+  options: DependencyCruiserOptions;
   projectDirectory: string;
   sourcePaths: string[];
 }) {
-  const result = await cruise(sourcePaths, {
-    ...options,
-    baseDir: projectDirectory,
-    outputType: undefined,
-    validate: true,
+  const response = await runDependencyCruiserWorker({
+    projectDirectory,
+    request: { options: options.encoded, projectDirectory: resolve(projectDirectory), sourcePaths },
   });
-  if (typeof result.output === "string") {
+  if (!("result" in response)) {
     throw new Error("dependency-cruiser returned an unexpected result");
   }
-  return result.output;
+  return response.result;
+}
+
+async function runDependencyCruiserWorker({
+  projectDirectory,
+  request,
+}: {
+  projectDirectory: string;
+  request: DependencyCruiserRequest;
+}): Promise<Exclude<DependencyCruiserResponse, { error: string }>> {
+  const source = import.meta.url.endsWith(".ts");
+  const workerPath = fileURLToPath(
+    new URL(`./dependency-cruiser-worker.${source ? "ts" : "js"}`, import.meta.url),
+  );
+  const arguments_ = [
+    ...(source ? ["--import", import.meta.resolve("tsx")] : []),
+    workerPath,
+  ];
+  return new Promise((resolve, reject) => {
+    const worker = spawn("node", arguments_, {
+      cwd: projectDirectory,
+      stdio: ["pipe", "pipe", "pipe", "pipe"],
+    });
+    const chunks: Buffer[] = [];
+    const output = worker.stdio[3];
+    let stderr = "";
+    output?.on("data", (chunk: Buffer) => chunks.push(chunk));
+    output?.on("error", reject);
+    worker.stdout?.on("data", (chunk: Buffer) => process.stderr.write(chunk));
+    worker.stderr?.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString();
+      process.stderr.write(chunk);
+    });
+    worker.on("error", reject);
+    worker.stdin?.on("error", reject);
+    worker.on("close", (code, signal) => {
+      if (code !== 0) {
+        reject(new Error(
+          `dependency-cruiser worker ${signal ? `received ${signal}` : `exited with code ${code}`}${stderr.trim() ? `: ${stderr.trim()}` : ""}`,
+        ));
+        return;
+      }
+      try {
+        const response = JSON.parse(Buffer.concat(chunks).toString(), (_key, value) =>
+          value && typeof value === "object" && "$premiseRegExp" in value
+            ? new RegExp(value.$premiseRegExp[0], value.$premiseRegExp[1])
+            : value,
+        ) as DependencyCruiserResponse;
+        if ("error" in response) {
+          reject(new Error(response.error));
+        } else {
+          resolve(response);
+        }
+      } catch (error) {
+        reject(error);
+      }
+    });
+    worker.stdin?.end(JSON.stringify(request));
+  });
 }
 
 async function evaluateArchitecturePremise({

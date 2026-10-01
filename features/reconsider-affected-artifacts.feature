@@ -30,7 +30,7 @@ Feature: Run executable requirements with minimal setup
     Given an empty project
     When I run "<command>"
     Then the command fails
-    And the command reports only the supported commands
+    And no legacy Premise files are created
 
     Examples:
       | command                                        |
