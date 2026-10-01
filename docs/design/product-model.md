@@ -3,6 +3,8 @@
 ## Status
 
 This document records design direction, not a fully implemented public API.
+For supported commands and configuration, use the [reference](../reference.md).
+For setup, use [Getting started](../getting-started.md) or [agent integrations](../agent-workflows.md).
 
 [Why Premise exists](../purpose.md) defines the outcomes this model must support.
 Use that purpose to evaluate changes to these mechanisms, not the existing
@@ -366,8 +368,11 @@ The current package implements:
 - provider-neutral premise drivers for architecture decisions;
 - requirement-to-implementation context discovery;
 - the `.decision` language and parser;
-- decision-driver resolution and supersession validation; and
-- committed review receipts enforced by `premise check`.
+- decision-driver resolution and supersession validation;
+- committed review receipts enforced by `premise check`; and
+- opt-in OMP, Codex and Claude Code lifecycle checks, with session-start decision
+  snapshots, current artifact context, completion verification and optional
+  advisory Jev review.
 
 `premise check` derives executable premise state from provider evaluation. It
 does not treat a changed source fingerprint as proof that a premise failed.
@@ -396,3 +401,5 @@ Untagged Gherkin features remain executable for compatibility. The Cucumber
 provider gives them an internal `cucumber:<uri>` identity so they can pass
 through the same evaluator, while omitting artifact evidence so they remain
 outside repository knowledge until given a stable ID.
+
+[Documentation index](../README.md)

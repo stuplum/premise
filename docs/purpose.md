@@ -86,3 +86,9 @@ Before choosing a provider, format or feature, identify:
 
 If we cannot demonstrate that connection, we have added tooling or documentation,
 not yet demonstrated the reason Premise exists.
+
+## Further reading
+
+- [Getting started](getting-started.md) for the supported adoption workflow.
+- [Agent integrations](agent-workflows.md) for session checks and their limits.
+- [Documentation index](README.md) for reference material, design records and experiments.

@@ -2,6 +2,8 @@
 
 Premise includes a Cucumber provider for executable behavioural Premises written in Gherkin.
 
+For first adoption, see [Getting started](../getting-started.md). For command behaviour and configuration fields, see the [CLI and configuration reference](../reference.md). Return to the [documentation index](../README.md).
+
 ## Default paths
 
 Features:
@@ -219,7 +221,7 @@ For a Gherkin Premise:
 established
 ```
 
-means Cucumber successfully executed the feature.
+means Cucumber successfully executed the scenarios selected by that premise. A feature without stable IDs is executed as a whole.
 
 ```text
 failed

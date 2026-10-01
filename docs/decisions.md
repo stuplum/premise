@@ -15,6 +15,8 @@ Instead it tracks:
 * supersession history;
 * whether it has been reviewed against its current drivers.
 
+For first adoption, see [Getting started](getting-started.md). For command behaviour, see the [CLI and configuration reference](reference.md); for session-start history protection, see [Agent workflows](agent-workflows.md). Return to the [documentation index](README.md).
+
 ## Format
 
 A minimal decision looks like:
@@ -77,7 +79,7 @@ The compatibility form:
 Driven by requirement ORDER-006
 ```
 
-is accepted and normalized internally to:
+is accepted and normalised internally to:
 
 ```text
 Driven by premise ORDER-006
@@ -140,6 +142,7 @@ A decision is reported as `reconsider` when its current review can no longer be 
 
 This includes:
 
+* no review receipt exists;
 * the decision source changed;
 * one of its driver sources changed;
 * an executable Premise driver failed;

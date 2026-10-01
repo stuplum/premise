@@ -1,162 +1,57 @@
 # Premise
 
-**Executable repository knowledge for software teams and coding agents.**
+**Executable requirements and architecture constraints, linked to the decisions they support.**
 
-Premise connects executable requirements and architecture constraints to the decisions they support. Its purpose is to reveal when changed requirements or implementation undermine those decisions, without erasing why they were made.
+Code can still follow an architecture decision after a new requirement makes that decision unsuitable. Premise checks the supporting claims and brings affected decisions back for review, without erasing why they were made.
 
-Premises are mechanically evaluated. Decisions remain human judgement and are tracked against the knowledge that drove them.
+For example, adding a sorting requirement to a query that only returns upstream results:
 
-Start with [Why Premise exists](docs/purpose.md) for the motivation, defining example and criteria for future work.
+```text
+QUERY-001 failed via cucumber.
+- Cucumber did not establish QUERY-001 (features/query.feature)
+Reconsider decision QUERY-010: Query upstream systems directly
 
-> Experimental `0.1` software. Requires Node.js 20+.
+Reason: Supporting premise QUERY-001 failed.
+Reason: Decision has not been reviewed against its current drivers.
+```
+
+*Excerpt from `premise check`. The full report includes the requirement, original decision and next steps.*
+
+- **Check repository claims.** Evaluate Gherkin behaviour with Cucumber and dependency rules with dependency-cruiser. Missing or inconclusive evidence is not a pass.
+- **Review decisions when their drivers change.** Reaffirm a choice after reconsidering it, or record a replacement with `Supersedes`. Decisions remain human judgement, not mechanically proven truths.
+- **Keep checks in the agent workflow.** OMP, Codex and Claude Code integrations supply relevant context and check evidence and decision history before completion.
 
 ## Install
 
-```sh
-pnpm add --save-dev @stuplum/premise
-```
+Requires Node.js 20 or newer.
 
 ```sh
 npm install --save-dev @stuplum/premise
 ```
 
-```sh
-yarn add --dev @stuplum/premise
-```
+[Other package managers](docs/getting-started.md#installation).
+
+Follow [Getting started](docs/getting-started.md) to adopt Premise with a coding agent or add your first executable requirement manually. Once configured:
 
 ```sh
-bun add --dev @stuplum/premise
+npm exec -- premise check
+npm exec -- premise context src/payment.ts
 ```
-
-## Onboard an existing repository
-
-Premise ships with prompts for agent-assisted onboarding.
-
-Give your coding agent:
-
-```text
-Onboard this repository to Premise.
-
-Read and follow:
-
-node_modules/@stuplum/premise/prompts/onboard.md
-
-Begin with discovery only. Do not modify the repository until you have
-shown me the proposed adoption scope and I have explicitly approved it.
-```
-
-The onboarding flow is:
-
-```text
-discover → review → adopt → audit
-```
-
-After adoption, use a fresh agent for the independent audit:
-
-```text
-Read and follow:
-
-node_modules/@stuplum/premise/prompts/audit.md
-
-Audit this repository's Premise integration.
-Do not modify the repository.
-```
-
-See [Getting started](docs/getting-started.md) for manual setup and CI integration.
-
-## Agent lifecycle integration
-
-Premise can run as part of an agent session rather than depend on the agent remembering to call a tool.
-
-* **OMP:** session orientation, a native `premise` tool, context on structured file operations, and a completion gate.
-* **Codex:** a bundled plugin with session-start, `apply_patch` context, and stop hooks.
-* **Claude Code:** a bundled plugin with session-start, `Read`/`Edit`/`Write` context, and stop hooks.
-* **Completion:** fresh executable evidence, current decision reviews, and preservation of decision records captured at session start.
-* **Jev:** optional advisory review. A concern, uncertainty, or unavailable service never becomes model approval that the agent must obtain.
-
-Repositories opt in with `premise.json`. Fixing the code does not clear a stale decision review: deliberately reaffirm the choice, or preserve the original and add a reviewed `Supersedes` replacement.
-
-See [Agent lifecycle setup](docs/getting-started.md#agent-lifecycle-integration) for installation, hook trust, runtime limits, and optional Jev configuration.
-
-## Current support
-
-| Knowledge                | Assertion                | Evaluation             |
-| ------------------------ | ------------------------ | ---------------------- |
-| Behaviour                | Gherkin                  | Cucumber               |
-| Architecture constraints | dependency-cruiser rules | dependency-cruiser     |
-| Architecture decisions   | `.decision`              | Human review lifecycle |
-
-## Commands
-
-```sh
-premise check
-```
-
-Evaluate executable Premises and decision consistency.
-
-```sh
-premise test
-```
-
-Run executable Premises and collect provider evidence.
-
-```sh
-premise context src/example.ts
-```
-
-Show repository knowledge relevant to an implementation file.
-
-```sh
-premise review ARCH-001
-```
-
-Record that a decision has been reviewed against its current drivers.
-
-## Example
-
-An executable architecture Premise can be expressed as a dependency-cruiser rule:
-
-```json
-{
-  "forbidden": [
-    {
-      "name": "ARCH-003",
-      "comment": "Domain code must not depend on HTTP infrastructure",
-      "severity": "error",
-      "from": { "path": "^src/domain" },
-      "to": { "path": "^src/http" }
-    }
-  ]
-}
-```
-
-`premise check` evaluates the claim against the current repository.
-
-A decision can then reference executable repository knowledge:
-
-```text
-Decision ORDER-002 "Durable confirmation delivery"
-Driven by premise ORDER-006
-Choose durable storage of pending confirmations
-Because accepted orders must survive delivery outages
-Accept possible duplicate delivery
-```
-
-Premise tracks whether that decision has been reviewed against its current drivers.
 
 ## Documentation
 
-* [Getting started](docs/getting-started.md)
-* [Architecture decisions](docs/decisions.md)
-* [Cucumber provider](docs/providers/cucumber.md)
-* [dependency-cruiser provider](docs/providers/dependency-cruiser.md)
-* [Product model](docs/design/product-model.md)
-* [Experiment results](docs/experiments/decision-enforcement-matrix.md)
-* [Contributing](CONTRIBUTING.md)
+[Getting started](docs/getting-started.md) · [Agent integrations](docs/agent-workflows.md) · [CLI and configuration](docs/reference.md)
+
+[Why Premise exists](docs/purpose.md) · [All documentation](docs/README.md) · [Contributing](https://github.com/stuplum/premise/blob/main/CONTRIBUTING.md)
+
+The documentation index separates user guides and reference material from design proposals, internal decision records and historical experiments.
 
 ## Status
 
-Premise is experimental software.
+Experimental `0.1` software. Current executable providers are Cucumber and dependency-cruiser; architecture decisions use the `.decision` format and a human review lifecycle.
+
+Agent hooks are workflow enforcement, not a security boundary. Host limits and interrupted sessions can bypass the normal completion path. See [agent setup and limitations](docs/agent-workflows.md) before relying on them.
+
+## Licence
 
 The source repository is public for evaluation but is currently unlicensed.
-

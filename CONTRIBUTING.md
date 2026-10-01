@@ -24,3 +24,12 @@ npm pack --dry-run
 
 By contributing, you agree that your contribution is provided for inclusion in
 this currently unlicensed project. A project licence will be chosen separately.
+
+## Documentation
+
+Use the [documentation index](docs/README.md) to find user guides, references,
+design records and experiments. Keep supported behaviour separate from proposed
+interfaces and historical results. Link new pages from the index and check
+relative links and runnable examples when moving or splitting content.
+
+See [Releasing](RELEASING.md) for package publication.
