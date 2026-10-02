@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 - 2026-10-02
 
 - Adds opt-in agent lifecycle checks with session-start decision snapshots,
   current artifact context, and completion blocking until executable premises
@@ -27,6 +27,8 @@
   dry runs, outcomes and coverage evidence including shared backgrounds.
 - Clarifies repository-owned premise identity and provider-owned metadata
   binding, with native and sidecar OpenAPI examples using the existing API.
+- Separates installation, agent setup, and command and configuration reference
+  into focused guides with runnable examples and a documentation index.
 
 ## 0.1.1 - 2026-09-24
 

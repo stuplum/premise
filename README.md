@@ -48,7 +48,7 @@ The documentation index separates user guides and reference material from design
 
 ## Status
 
-Experimental `0.1` software. Current executable providers are Cucumber and dependency-cruiser; architecture decisions use the `.decision` format and a human review lifecycle.
+Experimental `0.2` software. Current executable providers are Cucumber and dependency-cruiser; architecture decisions use the `.decision` format and a human review lifecycle.
 
 Agent hooks are workflow enforcement, not a security boundary. Host limits and interrupted sessions can bypass the normal completion path. See [agent setup and limitations](docs/agent-workflows.md) before relying on them.
 
