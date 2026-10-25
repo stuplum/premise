@@ -1,14 +1,13 @@
 {
   "name": "@stuplum/premise",
-  "version": "0.2.0",
-  "description": "Executable requirements and enforceable architecture decisions for software teams and coding agents.",
+  "version": "0.3.0",
+  "description": "Links architecture decisions to the results of a repository's own checks, and reports when a decision is violated, needs reconsidering or has gone stale.",
   "keywords": [
-    "bdd",
-    "cucumber",
-    "gherkin",
     "architecture-decisions",
-    "repository-knowledge",
-    "ai-agents",
+    "adr",
+    "junit",
+    "cucumber",
+    "dependency-cruiser",
     "developer-tools"
   ],
   "author": "stuplum",
@@ -27,7 +26,7 @@
   "type": "module",
   "packageManager": "pnpm@10.27.0",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -36,14 +35,6 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
-    "./cucumber": {
-      "types": "./dist/cucumber.d.ts",
-      "default": "./dist/cucumber.js"
-    },
-    "./omp": {
-      "types": "./dist/adapters/omp.d.ts",
-      "default": "./dist/adapters/omp.js"
-    },
     "./package.json": "./package.json"
   },
   "bin": {
@@ -51,39 +42,34 @@
   },
   "files": [
     "dist",
-    "grammar",
-    "hooks",
-    ".codex-plugin",
-    ".claude-plugin",
+    "schema",
     "docs",
-    "prompts",
     "CHANGELOG.md"
   ],
-  "omp": {
-    "extensions": ["./dist/adapters/omp.js"]
-  },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
-    "check:premise": "node dist/cli.js check",
-    "prepare": "npm run build",
-    "pretest": "pnpm build",
-    "prepublishOnly": "pnpm verify",
-    "test": "pnpm test:unit && pnpm test:acceptance",
-    "test:acceptance": "node --import tsx ./node_modules/@cucumber/cucumber/bin/cucumber.js --import 'features/step_definitions/**/*.ts'",
-    "test:unit": "node --import tsx --test test/*.test.ts",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
-    "verify": "pnpm typecheck && pnpm test && pnpm check:premise"
+    "test": "node --import tsx --test test/*.test.ts",
+    "reports": "mkdir -p reports && node --import tsx --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=reports/unit.xml test/*.test.ts && depcruise src --config .dependency-cruiser.json --output-type json --output-to reports/depcruise.json",
+    "check:premise": "node dist/cli.js check",
+    "verify": "pnpm typecheck && pnpm build && pnpm reports && pnpm check:premise",
+    "prepare": "npm run build",
+    "prepublishOnly": "pnpm verify"
   },
   "dependencies": {
-    "@cucumber/cucumber": "^12.2.0",
     "@cucumber/gherkin": "^38.0.0",
     "@cucumber/messages": "^32.3.1",
-    "dependency-cruiser": "16.10.4",
+    "ajv": "^8.20.0",
+    "fast-xml-parser": "^5.11.2",
     "glob": "^13.0.6",
-    "tsx": "^4.20.0"
+    "minimatch": "^10.2.6",
+    "yaml": "^2.9.1"
   },
   "devDependencies": {
+    "@faker-js/faker": "^10.6.0",
     "@types/node": "^24.0.0",
+    "dependency-cruiser": "16.10.4",
+    "tsx": "^4.23.15",
     "typescript": "^5.9.0"
   },
   "sideEffects": false

@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.3.0 - 2026-10-25
+
+- Rewrites Premise to read existing reports instead of running checks. Supports JUnit, Cucumber JSON and
+  dependency-cruiser JSON, matched to decisions by exact `@<ID>` tokens and rule names.
+- Replaces `.decision` files with YAML ADRs validated by `schema/decision.schema.json`, with options, reasons,
+  consequences, `scope`, `supported_by`, `enforced_by`, `signoff` and `supersedes`.
+- Adds `sha256:` fingerprints of normalised check text in each ADR link, `premise refresh`, the `stale` state, and
+  recovery of the signed text from git history.
+- Adds `premise signoff --base` with `jev` and `command` classifier adapters. A decision's `owners` can clear a
+  needs-human outcome by approving the pull request, read through the GitHub API with `--pull-request`.
+- Treats dependency-cruiser rules as unknown when the report has unresolved imports, uses `includeOnly` or `exclude`,
+  or ignores known violations, and when the rule's severity is `ignore`.
+- Replaces `premise.json` with `premise.yaml`, which has a different schema.
+- Configuration and usage errors now exit 2 instead of 1.
+- Removes the Cucumber and dependency-cruiser providers, the `./cucumber` and `./omp` exports, the `omp.extensions`
+  manifest key, review receipts, `premise review`, `premise test`, the `.decision` grammar, onboarding prompts, the
+  agent lifecycle hooks with their OMP, Codex and Claude Code integrations, and Node.js 20 support.
+
 ## 0.2.0 - 2026-10-02
 
 - Adds opt-in agent lifecycle checks with session-start decision snapshots,

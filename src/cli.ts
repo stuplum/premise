@@ -1,230 +1,136 @@
 #!/usr/bin/env node
+import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
+import { defaultRuntime } from "./classifiers/types.js";
+import { decisionsForFile, formatContext } from "./context.js";
+import { ConfigurationError, RefusedError } from "./errors.js";
+import { evaluateRepository } from "./evaluate.js";
+import { checkExitCode, formatEvaluations } from "./format.js";
+import { GITHUB_API_URL, githubApprovals } from "./github.js";
+import { refreshDecision } from "./refresh.js";
+import { renderDecisions } from "./render.js";
+import { formatSignoff, signoff, signoffExitCode, type Approvals } from "./signoff.js";
+import { errorMessage } from "./text.js";
 
-import { runAgentContexts, runAgentStart, runAgentStop } from "./agent-lifecycle.js";
-import { runExecutableRequirements } from "./executable-requirements.js";
-import { projectArtifactContext } from "./context-projection.js";
-import { renderArtifactContext } from "./context-renderer.js";
-import {
-  findDecisionsRequiringReview,
-  reviewDecision,
-  type DecisionRequiringReview,
-} from "./decision-awareness.js";
-import { evaluatePremises, type PremiseEvaluation } from "./provider.js";
-import { createDefaultProviders } from "./providers/default-providers.js";
+const usage =
+  "Usage: premise <check | refresh <ADR-ID> | signoff --base <ref> [--pull-request <n> [--repository <owner/name>]] | context <file> | render --out <dir>>";
 
-try {
-  await run({ arguments: process.argv.slice(2), projectDirectory: process.cwd() });
-} catch (error) {
-  process.stderr.write(`${errorMessage(error)}\n`);
-  process.exitCode = 1;
-}
-
-async function run({
-  arguments: arguments_,
-  projectDirectory,
-}: {
-  arguments: string[];
-  projectDirectory: string;
-}) {
-  const [command, ...commandArguments] = arguments_;
-
+export async function run({ args, projectDirectory }: { args: string[]; projectDirectory: string }): Promise<number> {
+  const [command, ...rest] = args;
   switch (command) {
-    case "agent":
-      await runAgent({ commandArguments, projectDirectory });
-      return;
-    case "test":
-      requireNoArguments({ command, commandArguments });
-      await runTests({ projectDirectory });
-      return;
-    case "context":
-      await runContext({ commandArguments, projectDirectory });
-      return;
     case "check":
-      requireNoArguments({ command, commandArguments });
-      await runCheck({ projectDirectory });
-      return;
-    case "review":
-      await runReview({ commandArguments, projectDirectory });
-      return;
+      return runCheck({ args: rest, projectDirectory });
+    case "refresh":
+      return runRefresh({ args: rest, projectDirectory });
+    case "signoff":
+      return runSignoff({ args: rest, projectDirectory });
+    case "context":
+      return runContext({ args: rest, projectDirectory });
+    case "render":
+      return runRender({ args: rest, projectDirectory });
     default:
-      throw new Error("Usage: premise <test|context|check|review|agent>");
+      throw new ConfigurationError(usage);
   }
 }
 
-async function runAgent({
-  commandArguments,
+async function runCheck({ args, projectDirectory }: { args: string[]; projectDirectory: string }): Promise<number> {
+  requireArgumentCount({ args, count: 0 });
+  const { evaluations } = await evaluateRepository({ projectDirectory });
+  process.stdout.write(formatEvaluations({ evaluations }));
+  return checkExitCode({ evaluations });
+}
+
+async function runRefresh({ args, projectDirectory }: { args: string[]; projectDirectory: string }): Promise<number> {
+  requireArgumentCount({ args, count: 1 });
+  const result = await refreshDecision({ projectDirectory, decisionId: args[0] ?? "" });
+  const lines = [result.uri, ...result.fingerprints.map(({ check, fingerprint }) => `  ${check} ${fingerprint}`)];
+  process.stdout.write(lines.map((line) => `${line}\n`).join(""));
+  return 0;
+}
+
+async function runSignoff({ args, projectDirectory }: { args: string[]; projectDirectory: string }): Promise<number> {
+  const options = parseOptions({ args, names: ["base", "pull-request", "repository"] });
+  if (!options.base) {
+    throw new ConfigurationError(usage);
+  }
+  const approvals = await pullRequestApprovals({ projectDirectory, options });
+  const outcomes = await signoff({ projectDirectory, base: options.base, runtime: defaultRuntime({ projectDirectory }), approvals });
+  process.stdout.write(formatSignoff({ outcomes }));
+  return signoffExitCode({ outcomes });
+}
+
+async function runContext({ args, projectDirectory }: { args: string[]; projectDirectory: string }): Promise<number> {
+  requireArgumentCount({ args, count: 1 });
+  process.stdout.write(formatContext(await decisionsForFile({ projectDirectory, file: args[0] ?? "" })));
+  return 0;
+}
+
+async function runRender({ args, projectDirectory }: { args: string[]; projectDirectory: string }): Promise<number> {
+  const out = requiredOption({ args, name: "out" });
+  const written = await renderDecisions({ projectDirectory, out });
+  process.stdout.write(written.map((uri) => `${uri}\n`).join(""));
+  return 0;
+}
+
+function requireArgumentCount({ args, count }: { args: string[]; count: number }): void {
+  if (args.length !== count) {
+    throw new ConfigurationError(usage);
+  }
+}
+
+function requiredOption({ args, name }: { args: string[]; name: string }): string {
+  const value = parseOptions({ args, names: [name] })[name];
+  if (!value) {
+    throw new ConfigurationError(usage);
+  }
+  return value;
+}
+
+function parseOptions({ args, names }: { args: string[]; names: string[] }): Record<string, string | undefined> {
+  try {
+    const parsed = parseArgs({
+      args,
+      options: Object.fromEntries(names.map((name) => [name, { type: "string" as const }])),
+      strict: true,
+      allowPositionals: false,
+    });
+    return Object.fromEntries(names.map((name) => [name, typeof parsed.values[name] === "string" ? parsed.values[name] : undefined]));
+  } catch {
+    throw new ConfigurationError(usage);
+  }
+}
+
+async function pullRequestApprovals({
   projectDirectory,
+  options,
 }: {
-  commandArguments: string[];
   projectDirectory: string;
-}) {
-  const [action, ...arguments_] = commandArguments;
-  const context = action === "context";
-  const offset = context ? 1 : 0;
-  const sessionId = arguments_[offset + 1];
-  if (
-    (action !== "start" && action !== "stop" && !context) ||
-    arguments_.length !== offset + 2 ||
-    arguments_[offset] !== "--session" ||
-    !sessionId?.trim() ||
-    sessionId.startsWith("--") ||
-    (context && !arguments_[0]?.trim())
-  ) {
-    throw new Error("Usage: premise agent <start|stop> --session <id> | premise agent context <artifact> --session <id>");
+  options: Record<string, string | undefined>;
+}): Promise<Approvals | undefined> {
+  const pullRequest = options["pull-request"];
+  if (pullRequest === undefined) {
+    return undefined;
   }
-  const input = { projectDirectory, sessionId };
-  const report = context
-    ? (await runAgentContexts({ ...input, artifacts: [arguments_[0]] }))[0]
-    : action === "start"
-      ? await runAgentStart(input)
-      : await runAgentStop(input);
-  process.stdout.write(`${JSON.stringify(report)}\n`);
-}
-
-async function runCheck({ projectDirectory }: { projectDirectory: string }) {
-  const evaluations = await evaluatePremises({
+  if (!/^[1-9][0-9]*$/.test(pullRequest)) {
+    throw new ConfigurationError("--pull-request must be a positive whole number");
+  }
+  const repository = options.repository || process.env.GITHUB_REPOSITORY;
+  if (!repository) {
+    throw new ConfigurationError("--pull-request needs --repository or GITHUB_REPOSITORY");
+  }
+  return githubApprovals({
     projectDirectory,
-    providers: createDefaultProviders({ silentCucumber: true }),
+    repository,
+    pullRequest: Number(pullRequest),
+    token: process.env.GITHUB_TOKEN ?? "",
+    apiUrl: process.env.GITHUB_API_URL || GITHUB_API_URL,
   });
-  const affectedDecisions = await findDecisionsRequiringReview({
-    evaluations,
-    projectDirectory,
+}
+
+if (process.argv[1] !== undefined && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  process.exitCode = await run({ args: process.argv.slice(2), projectDirectory: process.cwd() }).catch((error: unknown) => {
+    process.stderr.write(`${errorMessage(error)}\n`);
+    return error instanceof RefusedError ? 1 : 2;
   });
-
-  for (const evaluation of evaluations) {
-    writeUnestablishedPremise(evaluation);
-  }
-
-  for (const affected of affectedDecisions) {
-    writeAffectedDecision(affected);
-  }
-
-  if (
-    evaluations.some(({ result }) => result.status !== "established") ||
-    affectedDecisions.length > 0
-  ) {
-    process.exitCode = 1;
-  }
-}
-
-function writeUnestablishedPremise({
-  premise,
-  provider,
-  result,
-}: PremiseEvaluation) {
-  if (result.status === "established") {
-    return;
-  }
-
-  if (result.status === "unknown") {
-    process.stdout.write(
-      `${premise.id} unknown via ${provider}: ${result.reason}\n`,
-    );
-    return;
-  }
-
-  process.stdout.write(
-    [
-      `${premise.id} failed via ${provider}.`,
-      ...result.diagnostics.map(({ message, uri }) =>
-        uri ? `- ${message} (${uri})` : `- ${message}`,
-      ),
-      "",
-    ].join("\n"),
-  );
-}
-
-function writeAffectedDecision({
-  decision,
-  drivers,
-  reasons,
-}: DecisionRequiringReview): void {
-  process.stdout.write(
-    [
-      `Reconsider decision ${decision.decision.id}: ${decision.decision.title}`,
-      "",
-      ...reasons.map(({ message }) => `Reason: ${message}`),
-      "",
-      ...drivers.flatMap((driver) => [
-        `Driver source: ${driver.uri}`,
-        driver.content.trim(),
-        "",
-      ]),
-      "",
-      `Decision source: ${decision.uri}`,
-      decision.content.trim(),
-      "",
-      "After reconsidering:",
-      `- If it remains valid, run: premise review ${decision.decision.id}`,
-      "- If it no longer applies, add a new decision with Supersedes and review the new decision.",
-      "",
-    ].join("\n"),
-  );
-}
-
-async function runReview({
-  commandArguments,
-  projectDirectory,
-}: {
-  commandArguments: string[];
-  projectDirectory: string;
-}) {
-  const [decisionId, ...remainingArguments] = commandArguments;
-  if (!decisionId || remainingArguments.length > 0) {
-    throw new Error("Usage: premise review <decision-id>");
-  }
-  await reviewDecision({ decisionId, projectDirectory });
-}
-
-async function runContext({
-  commandArguments,
-  projectDirectory,
-}: {
-  commandArguments: string[];
-  projectDirectory: string;
-}) {
-  const [artifact, ...remainingArguments] = commandArguments;
-
-  if (!artifact || remainingArguments.length > 0) {
-    throw new Error("Usage: premise context <artifact>");
-  }
-
-  const evaluations = await evaluatePremises({
-    projectDirectory,
-    providers: createDefaultProviders({ silentCucumber: true }),
-  });
-  const context = await projectArtifactContext({
-    artifact,
-    evaluations,
-    projectDirectory,
-  });
-  if (context.knowledge.length === 0) {
-    process.stdout.write(`No context for ${artifact}\n`);
-    return;
-  }
-  process.stdout.write(renderArtifactContext(context));
-}
-
-async function runTests({ projectDirectory }: { projectDirectory: string }) {
-  const success = await runExecutableRequirements({ projectDirectory });
-
-  if (!success) {
-    process.exitCode = 1;
-  }
-}
-
-function requireNoArguments({
-  command,
-  commandArguments,
-}: {
-  command: string;
-  commandArguments: string[];
-}) {
-  if (commandArguments.length > 0) {
-    throw new Error(`premise ${command} does not accept arguments`);
-  }
-}
-
-function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
 }

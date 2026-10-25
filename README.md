@@ -1,57 +1,37 @@
 # Premise
 
-**Executable requirements and architecture constraints, linked to the decisions they support.**
+**Links architecture decisions to the results of a repository's own checks.**
 
-Code can still follow an architecture decision after a new requirement makes that decision unsuitable. Premise checks the supporting claims and brings affected decisions back for review, without erasing why they were made.
+Premise reads the JUnit, Cucumber JSON and dependency-cruiser reports a repository already produces, matches them by ID to decisions written as YAML ADRs, and reports each decision as `holds`, `violated`, `reconsider` or `stale`. It runs no tests. Every outcome is a function of committed files and reports; nothing is left to a coding agent's judgement.
 
-For example, adding a sorting requirement to a query that only returns upstream results:
+- **Conformance:** an `enforced_by` check failing means the code no longer follows the decision.
+- **Justification:** a `supported_by` check failing or disappearing means the reasons for the decision no longer hold.
+- **Drift:** a linked check whose meaning changed since the decision was last signed off needs a human, or a configured classifier, to confirm the decision still stands.
 
-```text
-QUERY-001 failed via cucumber.
-- Cucumber did not establish QUERY-001 (features/query.feature)
-Reconsider decision QUERY-010: Query upstream systems directly
+Start with [Why Premise exists](docs/purpose.md).
 
-Reason: Supporting premise QUERY-001 failed.
-Reason: Decision has not been reviewed against its current drivers.
-```
-
-*Excerpt from `premise check`. The full report includes the requirement, original decision and next steps.*
-
-- **Check repository claims.** Evaluate Gherkin behaviour with Cucumber and dependency rules with dependency-cruiser. Missing or inconclusive evidence is not a pass.
-- **Review decisions when their drivers change.** Reaffirm a choice after reconsidering it, or record a replacement with `Supersedes`. Decisions remain human judgement, not mechanically proven truths.
-- **Keep checks in the agent workflow.** OMP, Codex and Claude Code integrations supply relevant context and check evidence and decision history before completion.
+> Experimental `0.3` software. Requires Node.js 22+.
 
 ## Install
 
-Requires Node.js 20 or newer.
-
 ```sh
-npm install --save-dev @stuplum/premise
+pnpm add --save-dev @stuplum/premise
 ```
 
-[Other package managers](docs/getting-started.md#installation).
-
-Follow [Getting started](docs/getting-started.md) to adopt Premise with a coding agent or add your first executable requirement manually. Once configured:
+## Commands
 
 ```sh
-npm exec -- premise check
-npm exec -- premise context src/payment.ts
+premise check                    # state of every accepted decision
+premise refresh ADR-001          # write a decision's fingerprints after review
+premise signoff --base main      # classifier sign-off for changed fingerprints, in CI
+premise context src/domain/a.ts  # decisions that govern a file
+premise render --out docs/adr    # Markdown views of every ADR
 ```
 
 ## Documentation
 
-[Getting started](docs/getting-started.md) · [Agent integrations](docs/agent-workflows.md) · [CLI and configuration](docs/reference.md)
-
-[Why Premise exists](docs/purpose.md) · [All documentation](docs/README.md) · [Contributing](https://github.com/stuplum/premise/blob/main/CONTRIBUTING.md)
-
-The documentation index separates user guides and reference material from design proposals, internal decision records and historical experiments.
-
-## Status
-
-Experimental `0.2` software. Current executable providers are Cucumber and dependency-cruiser; architecture decisions use the `.decision` format and a human review lifecycle.
-
-Agent hooks are workflow enforcement, not a security boundary. Host limits and interrupted sessions can bypass the normal completion path. See [agent setup and limitations](docs/agent-workflows.md) before relying on them.
-
-## Licence
-
-The source repository is public for evaluation but is currently unlicensed.
+- [Getting started](docs/getting-started.md)
+- [Reference](docs/reference.md)
+- [Why Premise exists](docs/purpose.md)
+- [Documentation index](docs/README.md), including historical experiments
+- [Contributing](CONTRIBUTING.md)

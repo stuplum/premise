@@ -1,0 +1,21 @@
+{
+  "forbidden": [
+    {
+      "name": "no-check-runner-imports",
+      "comment": "Premise reads reports; it never runs the checks that produce them.",
+      "severity": "warn",
+      "from": { "path": "^src/" },
+      "to": { "path": "node_modules/(@cucumber/cucumber|dependency-cruiser|tsx)/" }
+    }
+  ],
+  "options": {
+    "doNotFollow": { "path": "node_modules" },
+    "tsConfig": { "fileName": "tsconfig.json" },
+    "tsPreCompilationDeps": true,
+    "enhancedResolveOptions": {
+      "exportsFields": ["exports"],
+      "conditionNames": ["import", "require", "node", "default"],
+      "extensions": [".ts", ".js", ".mjs", ".cjs", ".d.ts"]
+    }
+  }
+}

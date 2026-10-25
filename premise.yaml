@@ -1,0 +1,10 @@
+decisions: decisions
+reports:
+  - format: junit
+    path: reports/unit.xml
+  - format: dependency-cruiser
+    path: reports/depcruise.json
+dependency_cruiser_config: .dependency-cruiser.json
+signoff:
+  default: human
+  allowed: [human]

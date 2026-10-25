@@ -7,9 +7,8 @@ is replaced.**
 Code can still obey a decision after a new requirement makes that decision
 unsuitable. Keeping documentation consistent with code is not enough.
 
-This document states product intent, not a claim that the complete lifecycle is
-implemented. Use it to judge proposed work. The [product model](design/product-model.md)
-records the design and current implementation boundary.
+This document states product intent. Use it to judge proposed work. The
+[reference](reference.md) records current behaviour.
 
 ## The problem
 
@@ -77,7 +76,7 @@ architecture on the team's behalf.
 
 ## How to judge the next change
 
-Before choosing a provider, format or feature, identify:
+Before choosing a report format, field or feature, identify:
 
 - the claim it makes mechanically checkable;
 - the requirement or repository change that should make that claim fail;
@@ -90,5 +89,5 @@ not yet demonstrated the reason Premise exists.
 ## Further reading
 
 - [Getting started](getting-started.md) for the supported adoption workflow.
-- [Agent integrations](agent-workflows.md) for session checks and their limits.
-- [Documentation index](README.md) for reference material, design records and experiments.
+- [Reference](reference.md) for every field, state and command.
+- [Documentation index](README.md) for guides, reference material and experiments.

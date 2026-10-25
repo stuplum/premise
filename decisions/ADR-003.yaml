@@ -1,0 +1,44 @@
+id: ADR-003
+title: Link decisions to the results of the repository's own checks
+status: accepted
+date: 2026-10-25
+context: |
+  Premise ran Cucumber and dependency-cruiser itself. Onboarding sessions-service and planning-dashboard showed this
+  forced a second copy of each repository's tests, failed on the first run in repositories that run Gherkin through
+  anything other than cucumber-js, and added nothing to detection: Premise relabelled the same results. Review
+  receipts could be recorded by a coding agent, so the review gate was not mechanical.
+options:
+  - name: Keep providers that run checks
+    pros:
+      - Premise controls execution and can collect coverage per premise.
+    cons:
+      - Duplicates each repository's tests and runners.
+      - Runtime grows with the number of premises.
+  - name: Read the repository's own reports
+    pros:
+      - No duplicated tests, and any runner that emits JUnit, Cucumber JSON or dependency-cruiser JSON works.
+      - Every state is a function of committed files and report files.
+    cons:
+      - Reports must be produced before premise check runs.
+      - No per-premise coverage, so scope is declared in the ADR.
+  - name: Retire Premise in favour of conventions
+    pros:
+      - Nothing to install.
+    cons:
+      - Nothing mechanically flags a decision whose supporting checks fail or change.
+decision: Read the repository's own reports
+because:
+  - Detection belongs to the repository's own tools; Premise's value is linking their results to decisions.
+  - Every outcome must be mechanical, with nothing left to a coding agent's judgement.
+consequences:
+  - Human sign-off is a PR approval of fingerprint changes in the ADR; Premise does not record it.
+  - Classifier sign-off runs only in CI against the base branch.
+scope:
+  - src/**
+supported_by:
+  - check: DET-001
+    fingerprint: sha256:aaeaaa61987e50059fcd67cc0bd043f175134b3d9533d1b552f2c53727ce0b8f
+enforced_by:
+  - check: no-check-runner-imports
+    fingerprint: sha256:7a6e41236ab494fc2dfac41eebc061b2c12e958810592332b867303abde9bf95
+supersedes: ADR-002

@@ -1,0 +1,28 @@
+id: CTX-001
+title: Repository knowledge is projected, not generated
+status: accepted
+date: 2026-09-24
+context: |
+  Agents need to know which decisions apply to a file. A committed index of that mapping duplicates the decisions
+  and goes stale.
+options:
+  - name: Derive context live from repository sources
+    pros:
+      - Always reflects the current decisions.
+    cons:
+      - Context queries read decisions and reports each time.
+  - name: Commit a generated context index
+    pros:
+      - Fast lookups.
+    cons:
+      - Duplicates authoritative knowledge and can become stale.
+decision: Derive context live from repository sources
+because:
+  - Generated shadow state duplicates authoritative knowledge, can become stale, and creates repository and token cruft.
+consequences:
+  - Context queries take longer because they read decisions and reports each time.
+scope:
+  - src/context.ts
+supported_by:
+  - check: CTX-002
+    fingerprint: sha256:834ca35dc7483ed9a19804699847209c93cd95da66d96dbc2262546d50a58a65
