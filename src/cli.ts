@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { ConfigurationError, RefusedError } from "./errors.js";
 import { evaluateRepository } from "./evaluate.js";
 import { checkExitCode, formatEvaluations } from "./format.js";
+import { refreshDecision } from "./refresh.js";
 import { errorMessage } from "./text.js";
 
 const usage = "Usage: premise <check | refresh <ADR-ID> | signoff --base <ref> | context <file> | render --out <dir>>";
@@ -13,6 +14,8 @@ export async function run({ args, projectDirectory }: { args: string[]; projectD
   switch (command) {
     case "check":
       return runCheck({ args: rest, projectDirectory });
+    case "refresh":
+      return runRefresh({ args: rest, projectDirectory });
     default:
       throw new ConfigurationError(usage);
   }
@@ -23,6 +26,14 @@ async function runCheck({ args, projectDirectory }: { args: string[]; projectDir
   const { evaluations } = await evaluateRepository({ projectDirectory });
   process.stdout.write(formatEvaluations({ evaluations }));
   return checkExitCode({ evaluations });
+}
+
+async function runRefresh({ args, projectDirectory }: { args: string[]; projectDirectory: string }): Promise<number> {
+  requireArgumentCount({ args, count: 1 });
+  const result = await refreshDecision({ projectDirectory, decisionId: args[0] ?? "" });
+  const lines = [result.uri, ...result.fingerprints.map(({ check, fingerprint }) => `  ${check} ${fingerprint}`)];
+  process.stdout.write(lines.map((line) => `${line}\n`).join(""));
+  return 0;
 }
 
 function requireArgumentCount({ args, count }: { args: string[]; count: number }): void {
