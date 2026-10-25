@@ -15,7 +15,9 @@ import { currentSources } from "./sources.js";
 import { stableJson } from "./stable-json.js";
 import { arrayOf, compareText, isRecord } from "./text.js";
 
-export type SignoffVerdict = "passed" | "reconsider" | "needs-human";
+export type SignoffVerdict = "passed" | "approved" | "reconsider" | "needs-human";
+
+export type Approvals = { status: "available"; approvers: string[] } | { status: "unavailable"; reason: string };
 
 export type SignoffOutcome = {
   decisionId: string;
@@ -48,6 +50,7 @@ type BaseDecision = {
   fields: { status: unknown; title: unknown; context: unknown; because: unknown };
   fingerprints: Map<string, string>;
   links: BaseLink[];
+  owners: string[];
 };
 
 type BaseState = { status: "absent" } | { status: "unreadable" } | { status: "present"; decision: BaseDecision };
@@ -56,10 +59,12 @@ export async function signoff({
   projectDirectory,
   base,
   runtime,
+  approvals,
 }: {
   projectDirectory: string;
   base: string;
   runtime: ClassifierRuntime;
+  approvals?: Approvals;
 }): Promise<SignoffOutcome[]> {
   const config = await loadConfig({ projectDirectory });
   const decisions = await loadDecisions({ projectDirectory, config });
@@ -95,6 +100,8 @@ export async function signoff({
     ) {
       continue;
     }
+    const owners = baseDecision?.owners ?? [];
+    const record = (outcome: SignoffOutcome) => outcomes.push(withApprovals({ outcome, owners, approvals }));
     const headClassifier = config.classifiers[name];
     const classifier = baseConfig?.classifiers[name];
     const identity = {
@@ -107,16 +114,16 @@ export async function signoff({
       decisionBlocker({ decision, baseState, base }) ??
       (dropped.length > 0 ? `links removed or moved in this pull request: ${dropped.join(", ")}` : undefined);
     if (blocker !== undefined) {
-      outcomes.push({ ...identity, verdict: "needs-human", detail: blocker });
+      record({ ...identity, verdict: "needs-human", detail: blocker });
       continue;
     }
     if (classifier === undefined || stableJson(classifier) !== stableJson(headClassifier)) {
-      outcomes.push({ ...identity, verdict: "needs-human", detail: `classifier ${name} is not configured the same at ${base}` });
+      record({ ...identity, verdict: "needs-human", detail: `classifier ${name} is not configured the same at ${base}` });
       continue;
     }
     const prepared = await prepareChanges({ context, decision, changed, baseFingerprints });
     if (prepared.status === "blocked") {
-      outcomes.push({ ...identity, verdict: "needs-human", detail: prepared.reason });
+      record({ ...identity, verdict: "needs-human", detail: prepared.reason });
       continue;
     }
     const payload: SignoffPayload = {
@@ -124,12 +131,39 @@ export async function signoff({
       decision: { id: decision.id, title: decision.title, context: decision.context, because: decision.because },
       changes: prepared.changes,
     };
-    outcomes.push({ ...identity, ...verdictFor({ result: await classify({ payload, classifier, runtime }), classifier }) });
+    record({ ...identity, ...verdictFor({ result: await classify({ payload, classifier, runtime }), classifier }) });
   }
   outcomes.push(
-    ...(await removedDecisions({ projectDirectory, base, baseConfig, headUris: new Set(decisions.map((decision) => decision.uri)) })),
+    ...(await removedDecisions({ projectDirectory, base, baseConfig, headUris: new Set(decisions.map((decision) => decision.uri)) })).map(
+      ({ outcome, owners }) => withApprovals({ outcome, owners, approvals }),
+    ),
   );
   return outcomes;
+}
+
+function withApprovals({
+  outcome,
+  owners,
+  approvals,
+}: {
+  outcome: SignoffOutcome;
+  owners: string[];
+  approvals: Approvals | undefined;
+}): SignoffOutcome {
+  if (outcome.verdict !== "needs-human" || approvals === undefined) {
+    return outcome;
+  }
+  if (owners.length === 0) {
+    return { ...outcome, detail: `${outcome.detail}; no owners listed to approve` };
+  }
+  if (approvals.status === "unavailable") {
+    return { ...outcome, detail: `${outcome.detail}; approvals unavailable: ${approvals.reason}` };
+  }
+  const approvers = new Set(approvals.approvers.map((login) => login.toLowerCase()));
+  const approver = owners.map((owner) => owner.toLowerCase()).find((owner) => approvers.has(owner));
+  return approver === undefined
+    ? { ...outcome, detail: `${outcome.detail}; no approval from ${owners.join(", ")}` }
+    : { ...outcome, verdict: "approved", detail: `${outcome.detail}; approved by ${approver}` };
 }
 
 function droppedLinks({ decision, baseDecision }: { decision: Decision; baseDecision: BaseDecision | undefined }): string[] {
@@ -153,7 +187,7 @@ async function removedDecisions({
   base: string;
   baseConfig: Config | undefined;
   headUris: Set<string>;
-}): Promise<SignoffOutcome[]> {
+}): Promise<{ outcome: SignoffOutcome; owners: string[] }[]> {
   if (baseConfig === undefined) {
     return [];
   }
@@ -161,23 +195,26 @@ async function removedDecisions({
   const uris = (await filesAtRef({ projectDirectory, ref: base }))
     .filter((uri) => posix.dirname(uri) === directory && uri.endsWith(".yaml") && !headUris.has(uri))
     .sort(compareText);
-  const outcomes: SignoffOutcome[] = [];
+  const removed: { outcome: SignoffOutcome; owners: string[] }[] = [];
   for (const uri of uris) {
     const baseState = await decisionAtRef({ projectDirectory, ref: base, uri, defaultSignoff: baseConfig.signoff.default });
     const name = baseState.status === "present" ? classifierName(baseState.decision.signoff) : undefined;
     if (baseState.status !== "present" || name === undefined || baseState.decision.links.length === 0) {
       continue;
     }
-    outcomes.push({
-      decisionId: baseState.decision.id,
-      classifier: name,
-      model: baseConfig.classifiers[name]?.model ?? "unknown",
-      changed: [...new Set(baseState.decision.links.map((link) => link.check))].sort(compareText),
-      verdict: "needs-human",
-      detail: "decision removed in this pull request",
+    removed.push({
+      outcome: {
+        decisionId: baseState.decision.id,
+        classifier: name,
+        model: baseConfig.classifiers[name]?.model ?? "unknown",
+        changed: [...new Set(baseState.decision.links.map((link) => link.check))].sort(compareText),
+        verdict: "needs-human",
+        detail: "decision removed in this pull request",
+      },
+      owners: baseState.decision.owners,
     });
   }
-  return outcomes;
+  return removed;
 }
 
 export function formatSignoff({ outcomes }: { outcomes: SignoffOutcome[] }): string {
@@ -193,7 +230,7 @@ export function formatSignoff({ outcomes }: { outcomes: SignoffOutcome[] }): str
 }
 
 export function signoffExitCode({ outcomes }: { outcomes: SignoffOutcome[] }): 0 | 1 {
-  return outcomes.every((outcome) => outcome.verdict === "passed") ? 0 : 1;
+  return outcomes.every((outcome) => outcome.verdict === "passed" || outcome.verdict === "approved") ? 0 : 1;
 }
 
 async function decisionAtRef({
@@ -245,6 +282,7 @@ async function decisionAtRef({
       },
       fingerprints,
       links,
+      owners: arrayOf(document.owners).filter((owner): owner is string => typeof owner === "string"),
     },
   };
 }
@@ -274,8 +312,9 @@ function decisionBlocker({
     title: decision.title,
     context: decision.context,
     because: decision.because,
+    owners: decision.owners,
   };
-  const baseFields: Record<string, unknown> = { signoff: baseDecision.signoff, ...baseDecision.fields };
+  const baseFields: Record<string, unknown> = { signoff: baseDecision.signoff, ...baseDecision.fields, owners: baseDecision.owners };
   const changed = Object.keys(headFields).filter((field) => stableJson(headFields[field]) !== stableJson(baseFields[field]));
   return changed.length > 0 ? `decision changed in this pull request: ${changed.join(", ")}` : undefined;
 }

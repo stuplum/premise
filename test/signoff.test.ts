@@ -6,7 +6,7 @@ import { parse, stringify } from "yaml";
 import { JEV_ENDPOINT, type ClassifierRuntime } from "../src/classifiers/types.js";
 import { fingerprintOf } from "../src/fingerprint.js";
 import { refreshDecision } from "../src/refresh.js";
-import { formatSignoff, signoff, signoffExitCode } from "../src/signoff.js";
+import { formatSignoff, signoff, signoffExitCode, type Approvals } from "../src/signoff.js";
 import { assertConfigurationError } from "./support/assertions.js";
 import { runPremise } from "./support/cli.js";
 import {
@@ -33,7 +33,13 @@ function respondWith(probability: number): string {
 }
 
 function classifierDecision(overrides: Partial<DecisionDocument> = {}): DecisionDocument {
-  return createDecision({ id: "ADR-001", supported_by: [{ check: "PAY-001" }], signoff: "classifier:local", ...overrides });
+  return createDecision({
+    id: "ADR-001",
+    supported_by: [{ check: "PAY-001" }],
+    signoff: "classifier:local",
+    owners: ["alice"],
+    ...overrides,
+  });
 }
 
 function signoffConfig({
@@ -232,6 +238,71 @@ test("an unavailable classifier needs a human", async (t) => {
 
   assert.equal(outcomes[0]?.verdict, "needs-human");
   assert.equal(outcomes[0]?.detail, "classifier unavailable: exited with code 1");
+});
+
+function approvedBy(...logins: string[]): Approvals {
+  return { status: "available", approvers: logins };
+}
+
+test("an owner's approval clears a needs-human outcome", async (t) => {
+  const projectDirectory = await signedThenChanged({ t, respond: respondWith(0.5) });
+
+  const outcomes = await signoff({
+    projectDirectory,
+    base: "HEAD",
+    runtime: runtimeFor(projectDirectory),
+    approvals: approvedBy("someone", "Alice"),
+  });
+
+  assert.equal(outcomes[0]?.verdict, "approved");
+  assert.equal(outcomes[0]?.detail, "probability 0.5; approved by alice");
+  assert.equal(signoffExitCode({ outcomes }), 0);
+});
+
+test("an approval from someone who is not an owner at the base does not count", async (t) => {
+  const projectDirectory = await signedThenChanged({ t, respond: respondWith(0.5) });
+  await editDecision({ projectDirectory, changes: { owners: ["alice", "mallory"] } });
+
+  const outcomes = await signoff({ projectDirectory, base: "HEAD", runtime: runtimeFor(projectDirectory), approvals: approvedBy("mallory") });
+
+  assert.equal(outcomes[0]?.verdict, "needs-human");
+  assert.equal(outcomes[0]?.detail, "decision changed in this pull request: owners; no approval from alice");
+  assert.equal(signoffExitCode({ outcomes }), 1);
+});
+
+test("an owner's approval does not override reconsider", async (t) => {
+  const projectDirectory = await signedThenChanged({ t, respond: respondWith(0.05) });
+
+  const outcomes = await signoff({ projectDirectory, base: "HEAD", runtime: runtimeFor(projectDirectory), approvals: approvedBy("alice") });
+
+  assert.equal(outcomes[0]?.verdict, "reconsider");
+});
+
+test("approvals that cannot be read leave a needs-human outcome in place", async (t) => {
+  const projectDirectory = await signedThenChanged({ t, respond: respondWith(0.5) });
+
+  const outcomes = await signoff({
+    projectDirectory,
+    base: "HEAD",
+    runtime: runtimeFor(projectDirectory),
+    approvals: { status: "unavailable", reason: "HTTP 401" },
+  });
+
+  assert.equal(outcomes[0]?.verdict, "needs-human");
+  assert.equal(outcomes[0]?.detail, "probability 0.5; approvals unavailable: HTTP 401");
+});
+
+test("a decision without owners cannot be approved", async (t) => {
+  const projectDirectory = await createSignoffProject({ t, respond: respondWith(0.5), decision: classifierDecision({ owners: [] }) });
+  await refreshDecision({ projectDirectory, decisionId: "ADR-001" });
+  commitAll({ projectDirectory, message: "base" });
+  await writeFiles({ projectDirectory, files: { "features/payments.feature": feature("the total is 11") } });
+  await refreshDecision({ projectDirectory, decisionId: "ADR-001" });
+
+  const outcomes = await signoff({ projectDirectory, base: "HEAD", runtime: runtimeFor(projectDirectory), approvals: approvedBy("alice") });
+
+  assert.equal(outcomes[0]?.verdict, "needs-human");
+  assert.equal(outcomes[0]?.detail, "probability 0.5; no owners listed to approve");
 });
 
 test("unchanged fingerprints call no classifier", async (t) => {
