@@ -8,6 +8,7 @@ import { ConfigurationError, RefusedError } from "./errors.js";
 import { evaluateRepository } from "./evaluate.js";
 import { checkExitCode, formatEvaluations } from "./format.js";
 import { refreshDecision } from "./refresh.js";
+import { renderDecisions } from "./render.js";
 import { formatSignoff, signoff, signoffExitCode } from "./signoff.js";
 import { errorMessage } from "./text.js";
 
@@ -24,6 +25,8 @@ export async function run({ args, projectDirectory }: { args: string[]; projectD
       return runSignoff({ args: rest, projectDirectory });
     case "context":
       return runContext({ args: rest, projectDirectory });
+    case "render":
+      return runRender({ args: rest, projectDirectory });
     default:
       throw new ConfigurationError(usage);
   }
@@ -54,6 +57,13 @@ async function runSignoff({ args, projectDirectory }: { args: string[]; projectD
 async function runContext({ args, projectDirectory }: { args: string[]; projectDirectory: string }): Promise<number> {
   requireArgumentCount({ args, count: 1 });
   process.stdout.write(formatContext(await decisionsForFile({ projectDirectory, file: args[0] ?? "" })));
+  return 0;
+}
+
+async function runRender({ args, projectDirectory }: { args: string[]; projectDirectory: string }): Promise<number> {
+  const out = requiredOption({ args, name: "out" });
+  const written = await renderDecisions({ projectDirectory, out });
+  process.stdout.write(written.map((uri) => `${uri}\n`).join(""));
   return 0;
 }
 
