@@ -33,7 +33,7 @@ test("check exits 2 with the reason on a configuration error", async (t) => {
   const result = runPremise({ projectDirectory, args: ["check"] });
 
   assert.equal(result.status, 2);
-  assert.match(result.stderr, /report reports\/unit\.xml matches no file/);
+  assert.match(result.stderr, /premise\.yaml: decisions directory decisions does not exist/);
 });
 
 test("an unknown command exits 2 with usage", async (t) => {

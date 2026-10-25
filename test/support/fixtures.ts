@@ -135,6 +135,7 @@ export function decisionProject({
       ],
       ...config,
     }),
+    "decisions/.keep": "",
     ...decisionFiles({ decisions }),
     "reports/depcruise.json": dependencyCruiserReport({ rules: [noDbRule], violations }),
     "reports/unit.xml": junitReport({ cases }),

@@ -101,6 +101,17 @@ test("a scope that matches no file is rejected", async (t) => {
   });
 });
 
+test("a decisions directory that does not exist is a configuration error", async (t) => {
+  await assertConfigurationError({
+    action: load({ t, files: {} }),
+    pattern: /premise\.yaml: decisions directory decisions does not exist/,
+  });
+});
+
+test("an empty decisions directory loads no decisions", async (t) => {
+  assert.deepEqual(await load({ t, files: { "decisions/.keep": "" } }), []);
+});
+
 test("a valid supersession loads both decisions in id order", async (t) => {
   const files = {
     ...withDecisions([

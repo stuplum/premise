@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { join, posix } from "node:path";
 import { glob } from "glob";
 import { CONFIG_FILE } from "./config.js";
@@ -31,6 +31,7 @@ export async function loadDecisions({
   projectDirectory: string;
   config: Config;
 }): Promise<Decision[]> {
+  await requireDecisionsDirectory({ projectDirectory, config });
   const names = await glob("*.yaml", { cwd: join(projectDirectory, config.decisions), nodir: true, posix: true });
   const decisions: Decision[] = [];
   for (const name of names.sort(compareText)) {
@@ -38,6 +39,16 @@ export async function loadDecisions({
   }
   await requireConsistentDecisions({ projectDirectory, decisions, config });
   return decisions.sort((left, right) => compareText(left.id, right.id));
+}
+
+async function requireDecisionsDirectory({ projectDirectory, config }: { projectDirectory: string; config: Config }): Promise<void> {
+  const exists = await stat(join(projectDirectory, config.decisions)).then(
+    (stats) => stats.isDirectory(),
+    () => false,
+  );
+  if (!exists) {
+    throw new ConfigurationError(`${CONFIG_FILE}: decisions directory ${config.decisions} does not exist`);
+  }
 }
 
 async function readDecision({
