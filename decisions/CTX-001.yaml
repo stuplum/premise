@@ -25,4 +25,4 @@ scope:
   - src/context.ts
 supported_by:
   - check: CTX-002
-    fingerprint: sha256:c5cd54488d6d34e44e78f202b9ec0c728783f6be5916ac407be05667f74e4eba
+    fingerprint: sha256:834ca35dc7483ed9a19804699847209c93cd95da66d96dbc2262546d50a58a65
