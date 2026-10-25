@@ -38,3 +38,39 @@ export function decisionFiles({ decisions }: { decisions: DecisionDocument[] }):
     decisions.map((decision) => [`decisions/${decision.id}.yaml`, stringify(decision)]),
   );
 }
+
+export type JunitCaseFixture = { name: string; outcome?: "passed" | "failed" | "skipped"; file?: string };
+
+export function junitReport({ cases }: { cases: JunitCaseFixture[] }): string {
+  const body = cases.map((testCase) => {
+    const file = testCase.file === undefined ? "" : ` file="${escapeXml(testCase.file)}"`;
+    const open = `<testcase name="${escapeXml(testCase.name)}" classname="test"${file}`;
+    if (testCase.outcome === "failed") {
+      return `${open}><failure message="boom"/></testcase>`;
+    }
+    if (testCase.outcome === "skipped") {
+      return `${open}><skipped/></testcase>`;
+    }
+    return `${open}/>`;
+  });
+  return `<?xml version="1.0" encoding="utf-8"?>\n<testsuites>\n${body.join("\n")}\n</testsuites>\n`;
+}
+
+export type ScenarioFixture = { tags: string[]; statuses: string[]; type?: string };
+
+export function cucumberJsonReport({ scenarios }: { scenarios: ScenarioFixture[] }): string {
+  return JSON.stringify([
+    {
+      uri: "features/example.feature",
+      elements: scenarios.map((scenario) => ({
+        type: scenario.type ?? "scenario",
+        tags: scenario.tags.map((name) => ({ name })),
+        steps: scenario.statuses.map((status) => ({ result: { status } })),
+      })),
+    },
+  ]);
+}
+
+function escapeXml(value: string): string {
+  return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
+}
