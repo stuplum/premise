@@ -5,6 +5,7 @@ import { ConfigurationError } from "./errors.js";
 import { loadGherkinFiles, parsePickles, selectsGherkinFile, type GherkinFile } from "./gherkin.js";
 import { filesAtRef, readAtRef } from "./git.js";
 import type { Config } from "./model.js";
+import { leavesDirectory } from "./paths.js";
 import { ruleDefinition } from "./reports/dependency-cruiser.js";
 import type { Reports, RuleDefinition } from "./reports/model.js";
 import { parseJson } from "./reports/parse-json.js";
@@ -89,7 +90,7 @@ async function projectFile({ root, file }: { root: string; file: string }): Prom
   try {
     const absolute = await realpath(isAbsolute(file) ? file : join(root, file));
     const path = relative(root, absolute);
-    if (path === "" || path.startsWith("..") || isAbsolute(path)) {
+    if (path === "" || leavesDirectory(path)) {
       return undefined;
     }
     return (await stat(absolute)).isFile() ? path.split(sep).join("/") : undefined;

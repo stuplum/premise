@@ -226,6 +226,15 @@ test("a test file named by the report is read through symlinks and whitespace-no
   assert.equal(await checkText({ id: "A", sources }), "file test/a.test.ts\ntest('x', () => {});\nexpect(1);\n");
 });
 
+test("a test file whose name starts with two dots is read", async (t) => {
+  const projectDirectory = await createProject({ t, files: { ...configFile(), "..a.test.ts": "expect(1);\n" } });
+  const reports: Reports = { cases: [{ checks: ["A"], outcome: "passed", file: "..a.test.ts", source: "r.xml" }], rules: [] };
+
+  const sources = await currentSources({ projectDirectory, config: await loadConfig({ projectDirectory }), reports });
+
+  assert.equal(await checkText({ id: "A", sources }), "file ..a.test.ts\nexpect(1);\n");
+});
+
 test("a test file outside the project leaves the text unavailable", async (t) => {
   const projectDirectory = await createProject({ t, files: configFile() });
   const reports: Reports = { cases: [{ checks: ["A"], outcome: "passed", file: "/etc/hosts", source: "r.xml" }], rules: [] };

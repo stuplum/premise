@@ -64,6 +64,15 @@ test("proposed decisions are not part of context", async (t) => {
   assert.deepEqual(ids(await decisionsForFile({ projectDirectory, file: "src/x.ts" })), []);
 });
 
+test("a project file whose name starts with two dots is inside the project", async (t) => {
+  const projectDirectory = await createProject({
+    t,
+    files: { ...configFile(), ...decisionFiles({ decisions: [createDecision({ id: "ADR-001", scope: ["..env.ts"] })] }), "..env.ts": "" },
+  });
+
+  assert.deepEqual(ids(await decisionsForFile({ projectDirectory, file: "..env.ts" })), ["ADR-001"]);
+});
+
 test("a file outside the project is a configuration error", async (t) => {
   const projectDirectory = await createProject({ t, files: configFile() });
 

@@ -1,9 +1,10 @@
-import { isAbsolute, relative, resolve, sep } from "node:path";
+import { relative, resolve, sep } from "node:path";
 import { minimatch } from "minimatch";
 import { loadConfig } from "./config.js";
 import { loadDecisions } from "./decisions.js";
 import { ConfigurationError } from "./errors.js";
 import type { Decision } from "./model.js";
+import { leavesDirectory } from "./paths.js";
 import { loadAvailableRules } from "./reports/load.js";
 import type { RuleResult } from "./reports/model.js";
 import { isRecord } from "./text.js";
@@ -46,7 +47,7 @@ export function formatContext(result: ContextResult): string {
 
 function projectPath({ projectDirectory, file }: { projectDirectory: string; file: string }): string {
   const path = relative(projectDirectory, resolve(projectDirectory, file));
-  if (path === "" || path.startsWith("..") || isAbsolute(path)) {
+  if (path === "" || leavesDirectory(path)) {
     throw new ConfigurationError(`${file} is outside the project`);
   }
   return path.split(sep).join("/");
