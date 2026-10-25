@@ -1,5 +1,7 @@
-import { stringify } from "yaml";
 import { faker } from "@faker-js/faker";
+import { stringify } from "yaml";
+import { fingerprintOf } from "../../src/fingerprint.js";
+import { stableJson } from "../../src/stable-json.js";
 
 export type ConfigDocument = Record<string, unknown>;
 
@@ -108,3 +110,32 @@ export function dependencyCruiserReport({
 }
 
 export const noDbRule = { name: "no-db", severity: "error", from: { path: "^src" }, to: { path: "pg" } };
+
+export const noDbText = `${stableJson(noDbRule)}\n`;
+
+export const noDbFingerprint = fingerprintOf(noDbText);
+
+export function decisionProject({
+  decisions,
+  violations = [],
+  cases = [],
+  config = {},
+}: {
+  decisions: DecisionDocument[];
+  violations?: string[];
+  cases?: JunitCaseFixture[];
+  config?: ConfigDocument;
+}): Record<string, string> {
+  return {
+    ...configFile({
+      reports: [
+        { format: "dependency-cruiser", path: "reports/depcruise.json" },
+        { format: "junit", path: "reports/unit.xml" },
+      ],
+      ...config,
+    }),
+    ...decisionFiles({ decisions }),
+    "reports/depcruise.json": dependencyCruiserReport({ rules: [noDbRule], violations }),
+    "reports/unit.xml": junitReport({ cases }),
+  };
+}
