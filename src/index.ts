@@ -10,5 +10,8 @@ export { ConfigurationError, RefusedError } from "./errors.js";
 export type { CheckResult } from "./check-results.js";
 export type { DecisionEvaluation, DecisionState, Drift, LinkEvaluation, LinkKind, RepositoryEvaluation } from "./evaluate.js";
 export type { SignoffOutcome, SignoffVerdict } from "./signoff.js";
+export type { RefreshResult } from "./refresh.js";
+export { defaultRuntime, JEV_ENDPOINT } from "./classifiers/types.js";
+export type { ClassifierResult, ClassifierRuntime, SignoffPayload } from "./classifiers/types.js";
 export type { CheckLink, ClassifierConfig, Config, Decision, DecisionStatus, SignoffMode } from "./model.js";
 export type { Recovery } from "./recovery.js";
