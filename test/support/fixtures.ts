@@ -2,6 +2,7 @@ import { faker } from "@faker-js/faker";
 import { stringify } from "yaml";
 import { fingerprintOf } from "../../src/fingerprint.js";
 import { stableJson } from "../../src/stable-json.js";
+import { SIGNOFF_QUESTION, type SignoffPayload } from "../../src/classifiers/types.js";
 
 export type ConfigDocument = Record<string, unknown>;
 
@@ -138,4 +139,32 @@ export function decisionProject({
     "reports/depcruise.json": dependencyCruiserReport({ rules: [noDbRule], violations }),
     "reports/unit.xml": junitReport({ cases }),
   };
+}
+
+export function createPayload(overrides: Partial<SignoffPayload> = {}): SignoffPayload {
+  return {
+    question: SIGNOFF_QUESTION,
+    decision: {
+      id: "ADR-001",
+      title: faker.lorem.sentence(),
+      context: faker.lorem.paragraph(),
+      because: [faker.lorem.sentence()],
+    },
+    changes: [{ check: "PAY-001", before: "Action old\n", after: "Action new\n" }],
+    ...overrides,
+  };
+}
+
+export function judgeScript({ respond }: { respond: string }): string {
+  return [
+    'import { writeFileSync } from "node:fs";',
+    'let input = "";',
+    'process.stdin.on("data", (chunk) => { input += chunk; });',
+    'process.stdin.on("end", () => {',
+    '  writeFileSync("received.json", input);',
+    "  const { model } = JSON.parse(input);",
+    `  ${respond}`,
+    "});",
+    "",
+  ].join("\n");
 }
