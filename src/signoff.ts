@@ -2,7 +2,7 @@ import { parse } from "yaml";
 import { checkText, type CheckSources } from "./check-text.js";
 import { classify } from "./classifiers/classify.js";
 import { SIGNOFF_QUESTION, type ClassifierResult, type ClassifierRuntime, type SignoffPayload } from "./classifiers/types.js";
-import { classifierName, loadConfig } from "./config.js";
+import { CONFIG_FILE, classifierName, loadConfig, parseConfig } from "./config.js";
 import { loadDecisions } from "./decisions.js";
 import { fingerprintOf } from "./fingerprint.js";
 import { readAtRef, requireCommit } from "./git.js";
@@ -11,6 +11,7 @@ import { recoverSignedText } from "./recovery.js";
 import { loadReports } from "./reports/load.js";
 import type { Reports } from "./reports/model.js";
 import { currentSources } from "./sources.js";
+import { stableJson } from "./stable-json.js";
 import { arrayOf, compareText, isRecord } from "./text.js";
 
 export type SignoffVerdict = "passed" | "reconsider" | "needs-human";
@@ -51,6 +52,7 @@ export async function signoff({
   const decisions = await loadDecisions({ projectDirectory, config });
   await requireCommit({ projectDirectory, ref: base });
   const reports = await loadReports({ projectDirectory, config });
+  const baseConfig = await configAtRef({ projectDirectory, ref: base });
   const context: SignoffContext = {
     projectDirectory,
     base,
@@ -69,8 +71,13 @@ export async function signoff({
     if (changed.length === 0) {
       continue;
     }
-    const classifier = config.classifiers[name] as ClassifierConfig;
-    const identity = { decisionId: decision.id, classifier: name, model: classifier.model, changed: changed.map((link) => link.check) };
+    const headClassifier = config.classifiers[name] as ClassifierConfig;
+    const classifier = baseConfig?.classifiers[name];
+    const identity = { decisionId: decision.id, classifier: name, model: headClassifier.model, changed: changed.map((link) => link.check) };
+    if (classifier === undefined || stableJson(classifier) !== stableJson(headClassifier)) {
+      outcomes.push({ ...identity, verdict: "needs-human", detail: `classifier ${name} is not configured the same at ${base}` });
+      continue;
+    }
     const prepared = await prepareChanges({ context, decision, changed, baseFingerprints });
     if (prepared.status === "blocked") {
       outcomes.push({ ...identity, verdict: "needs-human", detail: prepared.reason });
@@ -131,6 +138,18 @@ async function fingerprintsAtRef({
     }
   }
   return fingerprints;
+}
+
+async function configAtRef({ projectDirectory, ref }: { projectDirectory: string; ref: string }): Promise<Config | undefined> {
+  const content = await readAtRef({ projectDirectory, ref, uri: CONFIG_FILE });
+  if (content === undefined) {
+    return undefined;
+  }
+  try {
+    return parseConfig({ content });
+  } catch {
+    return undefined;
+  }
 }
 
 function changedLinks({

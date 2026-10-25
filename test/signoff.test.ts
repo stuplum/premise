@@ -35,6 +35,17 @@ function classifierDecision(overrides: Partial<DecisionDocument> = {}): Decision
   return createDecision({ id: "ADR-001", supported_by: [{ check: "PAY-001" }], signoff: "classifier:local", ...overrides });
 }
 
+function signoffConfig({
+  thresholds = { established: 0.8, failed: 0.2 },
+}: { thresholds?: { established: number; failed: number } } = {}) {
+  return {
+    gherkin: "features/**/*.feature",
+    reports: [{ format: "cucumber-json", path: "reports/cucumber.json" }],
+    signoff: { default: "human", allowed: ["human", "classifier:local"] },
+    classifiers: { local: { adapter: "command", command: ["node", "judge.mjs"], model: "judge-1", thresholds } },
+  };
+}
+
 async function createSignoffProject({
   t,
   respond,
@@ -47,14 +58,7 @@ async function createSignoffProject({
   return createProject({
     t,
     files: {
-      ...configFile({
-        gherkin: "features/**/*.feature",
-        reports: [{ format: "cucumber-json", path: "reports/cucumber.json" }],
-        signoff: { default: "human", allowed: ["human", "classifier:local"] },
-        classifiers: {
-          local: { adapter: "command", command: ["node", "judge.mjs"], model: "judge-1", thresholds: { established: 0.8, failed: 0.2 } },
-        },
-      }),
+      ...configFile(signoffConfig()),
       ...decisionFiles({ decisions: [decision] }),
       "features/payments.feature": feature("the total is 10"),
       "reports/cucumber.json": cucumberJsonReport({ scenarios: [{ tags: ["@PAY-001"], statuses: ["passed", "passed"] }] }),
@@ -79,6 +83,19 @@ function runtimeFor(projectDirectory: string): ClassifierRuntime {
 async function received(projectDirectory: string) {
   return JSON.parse(await readFile(join(projectDirectory, "received.json"), "utf8"));
 }
+
+test("a classifier configuration changed in the pull request needs a human", async (t) => {
+  const projectDirectory = await signedThenChanged({ t, respond: respondWith(0.05) });
+  await writeFiles({
+    projectDirectory,
+    files: configFile(signoffConfig({ thresholds: { established: 0.01, failed: 0.001 } })),
+  });
+
+  const outcomes = await signoff({ projectDirectory, base: "HEAD", runtime: runtimeFor(projectDirectory) });
+
+  assert.equal(outcomes[0]?.verdict, "needs-human");
+  assert.match(outcomes[0]?.detail ?? "", /classifier local is not configured the same at HEAD/);
+});
 
 test("a high probability passes and the classifier sees the signed and current text", async (t) => {
   const projectDirectory = await signedThenChanged({ t, respond: respondWith(0.93) });

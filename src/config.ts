@@ -16,7 +16,10 @@ type ConfigDocument = {
 };
 
 export async function loadConfig({ projectDirectory }: { projectDirectory: string }): Promise<Config> {
-  const content = await readConfigFile({ projectDirectory });
+  return parseConfig({ content: await readConfigFile({ projectDirectory }) });
+}
+
+export function parseConfig({ content }: { content: string }): Config {
   const document = parseYaml({ content, uri: CONFIG_FILE });
   validateAgainst({ schema: "config", value: document, uri: CONFIG_FILE });
   const config = withDefaults(document as ConfigDocument);
