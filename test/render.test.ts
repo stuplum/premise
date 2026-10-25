@@ -109,3 +109,16 @@ test("render writes one Markdown file per decision", async (t) => {
   assert.equal(cli.status, 0);
   assert.equal(cli.stdout, "rendered/ADR-001.md\nrendered/ADR-002.md\n");
 });
+
+test("render writes to an absolute output directory as given", async (t) => {
+  const projectDirectory = await createProject({
+    t,
+    files: { ...configFile(), ...decisionFiles({ decisions: [createDecision({ id: "ADR-001" })] }) },
+  });
+  const out = await createProject({ t, files: {} });
+
+  const written = await renderDecisions({ projectDirectory, out });
+
+  assert.deepEqual(written, [join(out, "ADR-001.md")]);
+  assert.match(await readFile(join(out, "ADR-001.md"), "utf8"), /^# ADR-001: /);
+});

@@ -1,5 +1,5 @@
 import { mkdir, writeFile } from "node:fs/promises";
-import { join, posix } from "node:path";
+import { join, resolve } from "node:path";
 import { loadConfig } from "./config.js";
 import { loadDecisions } from "./decisions.js";
 import type { Decision, DecisionOption } from "./model.js";
@@ -35,12 +35,12 @@ export function renderDecision({
 export async function renderDecisions({ projectDirectory, out }: { projectDirectory: string; out: string }): Promise<string[]> {
   const config = await loadConfig({ projectDirectory });
   const decisions = await loadDecisions({ projectDirectory, config });
-  await mkdir(join(projectDirectory, out), { recursive: true });
+  await mkdir(resolve(projectDirectory, out), { recursive: true });
   const written: string[] = [];
   for (const decision of decisions) {
     const supersededBy = decisions.find((candidate) => candidate.supersedes === decision.id)?.id;
-    const uri = posix.join(out, `${decision.id}.md`);
-    await writeFile(join(projectDirectory, uri), renderDecision({ decision, supersededBy }));
+    const uri = join(out, `${decision.id}.md`);
+    await writeFile(resolve(projectDirectory, uri), renderDecision({ decision, supersededBy }));
     written.push(uri);
   }
   return written;
