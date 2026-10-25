@@ -20,6 +20,8 @@ Premise reads reports your checks already produce. Put the check ID in the test 
 
 Any runner that writes JUnit with `@<ID>` tokens in test names works. `premise check` and `premise signoff` read git history, so CI must check out full history.
 
+A check linked to a plain test is fingerprinted from its test file, which Premise finds through the JUnit `file` attribute, or `classname` when that is a path. The `node:test` JUnit reporter writes `file` from Node.js 24; on Node.js 22 the attribute is missing, so those checks have no text and their decisions stay `stale`. Produce the report on Node.js 24, or link the decision to a Gherkin scenario or dependency-cruiser rule.
+
 ## 3. Configure
 
 ```yaml
