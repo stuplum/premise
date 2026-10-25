@@ -35,6 +35,19 @@ dependency_cruiser_config: .dependency-cruiser.json
 
 `dependency_cruiser_config` must be a JSON file. With it, Premise can show how a rule changed and a classifier can sign rule changes off. Without it, or with a `.js` config, rule changes still make a decision stale, but only a human can sign them off.
 
+Any import dependency-cruiser cannot resolve makes every rule `unknown`, because a rule cannot see an import it could not resolve. Packages that publish only an `exports` map, such as `tsx`, need these options:
+
+```json
+"options": {
+  "doNotFollow": { "path": "node_modules" },
+  "enhancedResolveOptions": {
+    "exportsFields": ["exports"],
+    "conditionNames": ["import", "require", "node", "default"],
+    "extensions": [".ts", ".js", ".mjs", ".cjs", ".d.ts"]
+  }
+}
+```
+
 ## 4. Record a decision
 
 ```yaml
