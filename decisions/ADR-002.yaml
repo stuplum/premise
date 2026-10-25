@@ -1,0 +1,32 @@
+id: ADR-002
+title: Evaluate each Gherkin premise through its tag selector
+status: superseded
+date: 2026-09-25
+context: |
+  A feature file can express several independently identified claims. Whole-file execution cannot distinguish their
+  outcomes or implementation evidence, and requiring one ID per file makes an execution limitation dictate how
+  authors organise Gherkin.
+options:
+  - name: Keep the file-level boundary
+    pros:
+      - One baseline and execution pair per file, with simple attribution.
+    cons:
+      - Authors must split otherwise valid features to express separate claims.
+  - name: Execute each premise's selector independently
+    pros:
+      - Native Gherkin tag semantics determine scope, including rules, backgrounds and examples.
+      - Outcomes and coverage belong to the selected claim.
+    cons:
+      - Overlapping premises repeat execution and increase runtime.
+  - name: Partition coverage from one shared execution
+    pros:
+      - Scenarios execute once even when they support several claims.
+    cons:
+      - Requires per-scenario coverage and hook attribution that process-level coverage does not provide.
+decision: Execute each premise's selector independently
+because:
+  - Repeated execution is preferable to falsely associating another premise's outcome or artifacts with a claim.
+consequences:
+  - Multiple claims can coexist in one feature without sharing unrelated outcomes or evidence.
+  - Execution scales with the number of premises, not just feature files.
+supersedes: ADR-001

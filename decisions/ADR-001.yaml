@@ -1,0 +1,26 @@
+id: ADR-001
+title: Treat a feature file as the requirement boundary
+status: superseded
+date: 2026-09-21
+context: |
+  Premise collected execution coverage and calculated a fingerprint for a complete Gherkin feature file. If that
+  file contained multiple requirement IDs, assigning the same artifact set and fingerprint to every ID created false
+  relationships: an implementation exercised by one scenario appeared to implement every requirement in the file.
+options:
+  - name: One requirement per feature file
+    pros:
+      - Compiled context cannot claim false per-requirement precision.
+    cons:
+      - Teams that need multiple requirements must split them into feature files.
+  - name: Run Cucumber separately for each requirement tag
+    pros:
+      - Supports multiple requirements per file.
+    cons:
+      - Multiplies runtime.
+      - Needs explicit semantics for inherited tags, backgrounds, rules, examples and shared scenarios.
+decision: One requirement per feature file
+because:
+  - Assigning one file's evidence to several IDs creates false relationships.
+consequences:
+  - Premise accepts at most one requirement ID in a feature file and rejects additional IDs.
+  - Reconsider if splitting feature files damages the readability or maintainability of the Gherkin.

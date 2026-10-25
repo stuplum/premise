@@ -1,6 +1,19 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 - 2026-10-25
+
+- Rewrites Premise to read existing reports instead of running checks. Supports JUnit, Cucumber JSON and
+  dependency-cruiser JSON, matched to decisions by exact `@<ID>` tokens and rule names.
+- Replaces `.decision` files with YAML ADRs validated by `schema/decision.schema.json`, with options, reasons,
+  consequences, `scope`, `supported_by`, `enforced_by`, `signoff` and `supersedes`.
+- Adds `sha256:` fingerprints of normalised check text in each ADR link, `premise refresh`, the `stale` state, and
+  recovery of the signed text from git history.
+- Adds `premise signoff --base` with `jev` and `command` classifier adapters.
+- Treats dependency-cruiser rules as unknown when the report has unresolved imports or uses `includeOnly` or `exclude`.
+- Removes the Cucumber and dependency-cruiser providers, the `./cucumber` export, review receipts, `premise review`,
+  `premise test`, the `.decision` grammar, onboarding prompts and Node.js 20 support.
+
+## 0.2.0 - 2026-10-02
 
 - Reserves canonical provider, premise type, dialect, and evidence-role
   identifiers, with independent `namespace:name` extensions for third parties.

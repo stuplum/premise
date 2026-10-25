@@ -1,14 +1,16 @@
 # Premise
 
-**Executable repository knowledge for software teams and coding agents.**
+**Links architecture decisions to the results of a repository's own checks.**
 
-Premise connects executable requirements and architecture constraints to the decisions they support. Its purpose is to reveal when changed requirements or implementation undermine those decisions, without erasing why they were made.
+Premise reads the JUnit, Cucumber JSON and dependency-cruiser reports a repository already produces, matches them by ID to decisions written as YAML ADRs, and reports each decision as `holds`, `violated`, `reconsider` or `stale`. It runs no tests. Every outcome is a function of committed files and reports; nothing is left to a coding agent's judgement.
 
-Premises are mechanically evaluated. Decisions remain human judgement and are tracked against the knowledge that drove them.
+- **Conformance:** an `enforced_by` check failing means the code no longer follows the decision.
+- **Justification:** a `supported_by` check failing or disappearing means the reasons for the decision no longer hold.
+- **Drift:** a linked check whose meaning changed since the decision was last signed off needs a human, or a configured classifier, to confirm the decision still stands.
 
-Start with [Why Premise exists](docs/purpose.md) for the motivation, defining example and criteria for future work.
+Start with [Why Premise exists](docs/purpose.md).
 
-> Experimental `0.1` software. Requires Node.js 20+.
+> Experimental `0.3` software. Requires Node.js 22+.
 
 ## Install
 
@@ -16,133 +18,20 @@ Start with [Why Premise exists](docs/purpose.md) for the motivation, defining ex
 pnpm add --save-dev @stuplum/premise
 ```
 
-```sh
-npm install --save-dev @stuplum/premise
-```
-
-```sh
-yarn add --dev @stuplum/premise
-```
-
-```sh
-bun add --dev @stuplum/premise
-```
-
-## Onboard an existing repository
-
-Premise ships with prompts for agent-assisted onboarding.
-
-Give your coding agent:
-
-```text
-Onboard this repository to Premise.
-
-Read and follow:
-
-node_modules/@stuplum/premise/prompts/onboard.md
-
-Begin with discovery only. Do not modify the repository until you have
-shown me the proposed adoption scope and I have explicitly approved it.
-```
-
-The onboarding flow is:
-
-```text
-discover → review → adopt → audit
-```
-
-After adoption, use a fresh agent for the independent audit:
-
-```text
-Read and follow:
-
-node_modules/@stuplum/premise/prompts/audit.md
-
-Audit this repository's Premise integration.
-Do not modify the repository.
-```
-
-See [Getting started](docs/getting-started.md) for manual setup and CI integration.
-
-## Current support
-
-| Knowledge                | Assertion                | Evaluation             |
-| ------------------------ | ------------------------ | ---------------------- |
-| Behaviour                | Gherkin                  | Cucumber               |
-| Architecture constraints | dependency-cruiser rules | dependency-cruiser     |
-| Architecture decisions   | `.decision`              | Human review lifecycle |
-
 ## Commands
 
 ```sh
-premise check
+premise check                    # state of every accepted decision
+premise refresh ADR-001          # write a decision's fingerprints after review
+premise signoff --base main      # classifier sign-off for changed fingerprints, in CI
+premise context src/domain/a.ts  # decisions that govern a file
+premise render --out docs/adr    # Markdown views of every ADR
 ```
-
-Evaluate executable Premises and decision consistency.
-
-```sh
-premise test
-```
-
-Run executable Premises and collect provider evidence.
-
-```sh
-premise context src/example.ts
-```
-
-Show repository knowledge relevant to an implementation file.
-
-```sh
-premise review ARCH-001
-```
-
-Record that a decision has been reviewed against its current drivers.
-
-## Example
-
-An executable architecture Premise can be expressed as a dependency-cruiser rule:
-
-```json
-{
-  "forbidden": [
-    {
-      "name": "ARCH-003",
-      "comment": "Domain code must not depend on HTTP infrastructure",
-      "severity": "error",
-      "from": { "path": "^src/domain" },
-      "to": { "path": "^src/http" }
-    }
-  ]
-}
-```
-
-`premise check` evaluates the claim against the current repository.
-
-A decision can then reference executable repository knowledge:
-
-```text
-Decision ORDER-002 "Durable confirmation delivery"
-Driven by premise ORDER-006
-Choose durable storage of pending confirmations
-Because accepted orders must survive delivery outages
-Accept possible duplicate delivery
-```
-
-Premise tracks whether that decision has been reviewed against its current drivers.
 
 ## Documentation
 
-* [Getting started](docs/getting-started.md)
-* [Architecture decisions](docs/decisions.md)
-* [Cucumber provider](docs/providers/cucumber.md)
-* [dependency-cruiser provider](docs/providers/dependency-cruiser.md)
-* [Product model](docs/design/product-model.md)
-* [Experiment results](docs/experiments/decision-enforcement-matrix.md)
-* [Contributing](CONTRIBUTING.md)
-
-## Status
-
-Premise is experimental software.
-
-The source repository is public for evaluation but is currently unlicensed.
-
+- [Getting started](docs/getting-started.md)
+- [Reference](docs/reference.md)
+- [Why Premise exists](docs/purpose.md)
+- [Experiment results](docs/experiments/decision-enforcement-matrix.md)
+- [Contributing](CONTRIBUTING.md)

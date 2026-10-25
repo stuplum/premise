@@ -1,0 +1,21 @@
+{
+  "forbidden": [
+    {
+      "name": "no-test-runner-imports",
+      "comment": "Premise reads reports; it never runs a test runner.",
+      "severity": "warn",
+      "from": { "path": "^src/" },
+      "to": { "path": "node_modules/(@cucumber/cucumber|tsx)/" }
+    }
+  ],
+  "options": {
+    "doNotFollow": { "path": "node_modules" },
+    "tsConfig": { "fileName": "tsconfig.json" },
+    "tsPreCompilationDeps": true,
+    "enhancedResolveOptions": {
+      "exportsFields": ["exports"],
+      "conditionNames": ["import", "require", "node", "default"],
+      "extensions": [".ts", ".js", ".mjs", ".cjs", ".d.ts"]
+    }
+  }
+}

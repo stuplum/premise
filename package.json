@@ -1,6 +1,6 @@
 {
   "name": "@stuplum/premise",
-  "version": "0.1.1",
+  "version": "0.3.0",
   "description": "Links architecture decisions to the results of a repository's own checks, and reports when a decision is violated, needs reconsidering or has gone stale.",
   "keywords": [
     "architecture-decisions",
@@ -47,10 +47,14 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test test/*.test.ts",
-    "prepare": "npm run build"
+    "reports": "mkdir -p reports && node --import tsx --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=reports/unit.xml test/*.test.ts && depcruise src --config .dependency-cruiser.json --output-type json --output-to reports/depcruise.json",
+    "check:premise": "node dist/cli.js check",
+    "verify": "pnpm typecheck && pnpm build && pnpm reports && pnpm check:premise",
+    "prepare": "npm run build",
+    "prepublishOnly": "pnpm verify"
   },
   "dependencies": {
     "@cucumber/gherkin": "^38.0.0",
