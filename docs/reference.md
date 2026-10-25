@@ -43,6 +43,7 @@ One YAML file per decision, named `<id>.yaml`. Schema: `schema/decision.schema.j
 | `supported_by` | no | Links `{ check, fingerprint }` whose results justify the decision |
 | `enforced_by` | no | Links `{ check, fingerprint }` whose results show the code conforms |
 | `signoff` | no | Overrides `signoff.default` |
+| `owners` | no | GitHub usernames whose approval clears a needs-human classifier sign-off |
 | `supersedes` | no | The ID of a decision with `status: superseded` |
 
 Only `accepted` decisions are evaluated.
@@ -90,7 +91,9 @@ Recovery fails, and a human must sign off, when history is shallow or rewritten,
 - `none`: a stale decision is a warning.
 - `classifier:<name>`: `premise signoff --base <ref>` in PR CI sends the decision's `title`, `context`, `because` and the signed and current text of each changed link to the classifier. A probability at or above `established` passes; at or below `failed` means reconsider; anything else, an unavailable classifier, or signed text that cannot be recovered needs a human. Make the job a required check and check out full history.
 
-`signoff` trusts only the base branch: the decision's sign-off mode, status and reasons, and the classifier's configuration, come from `<ref>`. A pull request that changes any of these, removes or moves a signed link, or adds or deletes a classifier-signed decision needs a human.
+`signoff` trusts only the base branch: the decision's sign-off mode, status, reasons and owners, and the classifier's configuration, come from `<ref>`. A pull request that changes any of these, removes or moves a signed link, or adds or deletes a classifier-signed decision needs a human.
+
+A needs-human outcome becomes `approved` when one of the decision's `owners` at `<ref>` has approved the pull request. With `--pull-request`, `signoff` reads the pull request from the GitHub API using `GITHUB_TOKEN`, the repository from `--repository` or `GITHUB_REPOSITORY`, and `GITHUB_API_URL` when set. Only each reviewer's latest approve, request-changes or dismissal counts, it must be for the pull request's head commit, and the checkout must be that head or GitHub's merge of it. `reconsider` is never cleared by approval. If the approvals cannot be read, the outcome stays needs-human.
 
 ### Adapters
 
@@ -103,7 +106,7 @@ Recovery fails, and a human must sign off, when history is shallow or rewritten,
 |---|---|---|
 | `premise check` | Prints every accepted decision's state and links | `0` all hold (or stale with `signoff: none`), `1` otherwise |
 | `premise refresh <ID>` | Writes current fingerprints into a decision; refuses while a link fails, is unknown or has no text | `0` written, `1` refused |
-| `premise signoff --base <ref>` | Runs classifiers for fingerprints that changed since `<ref>` in classifier-signed decisions | `0` every outcome passed, `1` otherwise |
+| `premise signoff --base <ref> [--pull-request <n> [--repository <owner/name>]]` | Runs classifiers for fingerprints that changed since `<ref>` in classifier-signed decisions, and reads owners' approvals from the pull request | `0` every outcome passed or approved, `1` otherwise |
 | `premise context <file>` | Lists accepted decisions whose `scope`, or linked dependency-cruiser rule `from` paths, match the file | `0` |
 | `premise render --out <dir>` | Writes `<ID>.md` for every decision | `0` |
 

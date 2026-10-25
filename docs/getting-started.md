@@ -91,15 +91,31 @@ npx premise check
 - run: npx premise check
 ```
 
-For classifier sign-off, add a required PR job:
+For classifier sign-off, add a PR workflow and make its job a required check. It runs again when someone reviews, so an owner's approval can clear a change the classifier could not:
 
 ```yaml
-- uses: actions/checkout@v4
-  with:
-    fetch-depth: 0
-- run: npx premise signoff --base origin/${{ github.base_ref }}
-  env:
-    TYPESAFE_AI_API_KEY: ${{ secrets.TYPESAFE_AI_API_KEY }}
+on:
+  pull_request:
+  pull_request_review:
+    types: [submitted, dismissed]
+
+jobs:
+  signoff:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: pnpm install --frozen-lockfile && pnpm test   # writes reports/
+      - run: npx premise signoff --base origin/${{ github.base_ref }} --pull-request ${{ github.event.pull_request.number }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TYPESAFE_AI_API_KEY: ${{ secrets.TYPESAFE_AI_API_KEY }}
 ```
+
+List the GitHub usernames allowed to approve in each classifier-signed decision's `owners`. Leave those decision files out of CODEOWNERS, or every fingerprint change will need an owner's review whatever the classifier says.
 
 See the [reference](reference.md) for every field, state and command.

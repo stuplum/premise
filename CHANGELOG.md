@@ -8,7 +8,8 @@
   consequences, `scope`, `supported_by`, `enforced_by`, `signoff` and `supersedes`.
 - Adds `sha256:` fingerprints of normalised check text in each ADR link, `premise refresh`, the `stale` state, and
   recovery of the signed text from git history.
-- Adds `premise signoff --base` with `jev` and `command` classifier adapters.
+- Adds `premise signoff --base` with `jev` and `command` classifier adapters. A decision's `owners` can clear a
+  needs-human outcome by approving the pull request, read through the GitHub API with `--pull-request`.
 - Treats dependency-cruiser rules as unknown when the report has unresolved imports, uses `includeOnly` or `exclude`,
   or ignores known violations, and when the rule's severity is `ignore`.
 - Replaces `premise.json` with `premise.yaml`, which has a different schema.
