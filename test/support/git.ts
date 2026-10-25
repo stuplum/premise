@@ -1,6 +1,4 @@
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 
 export function git({ projectDirectory, args }: { projectDirectory: string; args: string[] }): string {
   return execFileSync(
@@ -11,10 +9,18 @@ export function git({ projectDirectory, args }: { projectDirectory: string; args
 }
 
 export function commitAll({ projectDirectory, message }: { projectDirectory: string; message: string }): string {
-  if (!existsSync(join(projectDirectory, ".git"))) {
+  if (!insideWorkTree(projectDirectory)) {
     git({ projectDirectory, args: ["init", "-q"] });
   }
   git({ projectDirectory, args: ["add", "-A"] });
   git({ projectDirectory, args: ["commit", "-q", "--allow-empty", "-m", message] });
   return git({ projectDirectory, args: ["rev-parse", "HEAD"] }).trim();
+}
+
+function insideWorkTree(projectDirectory: string): boolean {
+  try {
+    return git({ projectDirectory, args: ["rev-parse", "--is-inside-work-tree"] }).trim() === "true";
+  } catch {
+    return false;
+  }
 }

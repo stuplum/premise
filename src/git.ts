@@ -23,11 +23,11 @@ export async function readAtRef({
   uri: string;
 }): Promise<string | undefined> {
   try {
-    await execFileAsync("git", ["cat-file", "-e", `${ref}:${uri}`], { cwd: projectDirectory });
+    await execFileAsync("git", ["cat-file", "-e", `${ref}:./${uri}`], { cwd: projectDirectory });
   } catch {
     return undefined;
   }
-  const { stdout } = await execFileAsync("git", ["show", `${ref}:${uri}`], { cwd: projectDirectory, encoding: "utf8", maxBuffer });
+  const { stdout } = await execFileAsync("git", ["show", `${ref}:./${uri}`], { cwd: projectDirectory, encoding: "utf8", maxBuffer });
   return stdout;
 }
 
