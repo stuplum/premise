@@ -143,6 +143,43 @@ test("a classifier-signed decision added in the pull request needs a human", asy
   assert.equal(outcomes[0]?.detail, "decision is new in this pull request");
 });
 
+test("a signed link removed in the pull request needs a human", async (t) => {
+  const projectDirectory = await signedThenChanged({ t, respond: respondWith(0.93) });
+  await editDecision({ projectDirectory, changes: { supported_by: [] } });
+
+  const outcomes = await signoff({ projectDirectory, base: "HEAD", runtime: runtimeFor(projectDirectory) });
+
+  assert.equal(outcomes[0]?.verdict, "needs-human");
+  assert.equal(outcomes[0]?.detail, "links removed or moved in this pull request: PAY-001");
+});
+
+test("a signed link moved to the other list in the pull request needs a human", async (t) => {
+  const projectDirectory = await createSignoffProject({ t, respond: respondWith(0.93) });
+  await refreshDecision({ projectDirectory, decisionId: "ADR-001" });
+  commitAll({ projectDirectory, message: "base" });
+  const path = join(projectDirectory, "decisions/ADR-001.yaml");
+  const document = parse(await readFile(path, "utf8"));
+  await editDecision({ projectDirectory, changes: { supported_by: [], enforced_by: document.supported_by } });
+
+  const outcomes = await signoff({ projectDirectory, base: "HEAD", runtime: runtimeFor(projectDirectory) });
+
+  assert.equal(outcomes[0]?.verdict, "needs-human");
+  assert.equal(outcomes[0]?.detail, "links removed or moved in this pull request: PAY-001");
+});
+
+test("a classifier-signed decision deleted in the pull request needs a human", async (t) => {
+  const projectDirectory = await createSignoffProject({ t, respond: respondWith(0.93) });
+  await refreshDecision({ projectDirectory, decisionId: "ADR-001" });
+  commitAll({ projectDirectory, message: "base" });
+  await rm(join(projectDirectory, "decisions/ADR-001.yaml"));
+
+  const outcomes = await signoff({ projectDirectory, base: "HEAD", runtime: runtimeFor(projectDirectory) });
+
+  assert.deepEqual(outcomes.map((outcome) => [outcome.decisionId, outcome.verdict, outcome.detail, outcome.changed]), [
+    ["ADR-001", "needs-human", "decision removed in this pull request", ["PAY-001"]],
+  ]);
+});
+
 test("a classifier configuration changed in the pull request needs a human", async (t) => {
   const projectDirectory = await signedThenChanged({ t, respond: respondWith(0.05) });
   await writeFiles({

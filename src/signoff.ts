@@ -1,3 +1,4 @@
+import { posix } from "node:path";
 import { parse } from "yaml";
 import { checkText, type CheckSources } from "./check-text.js";
 import { classify } from "./classifiers/classify.js";
@@ -5,7 +6,7 @@ import { SIGNOFF_QUESTION, type ClassifierResult, type ClassifierRuntime, type S
 import { CONFIG_FILE, classifierName, loadConfig, parseConfig } from "./config.js";
 import { loadDecisions } from "./decisions.js";
 import { fingerprintOf } from "./fingerprint.js";
-import { readAtRef, requireCommit } from "./git.js";
+import { filesAtRef, readAtRef, requireCommit } from "./git.js";
 import type { ClassifierConfig, Config, Decision } from "./model.js";
 import { recoverSignedText } from "./recovery.js";
 import { loadReports } from "./reports/load.js";
@@ -39,10 +40,14 @@ type PreparedChanges =
   | { status: "ready"; changes: SignoffPayload["changes"] }
   | { status: "blocked"; reason: string };
 
+type BaseLink = { kind: "supported_by" | "enforced_by"; check: string };
+
 type BaseDecision = {
+  id: string;
   signoff: string;
   fields: { status: unknown; title: unknown; context: unknown; because: unknown };
   fingerprints: Map<string, string>;
+  links: BaseLink[];
 };
 
 type BaseState = { status: "absent" } | { status: "unreadable" } | { status: "present"; decision: BaseDecision };
@@ -83,7 +88,11 @@ export async function signoff({
     }
     const baseFingerprints = baseDecision?.fingerprints ?? new Map<string, string>();
     const changed = changedLinks({ decision, baseFingerprints });
-    if (changed.length === 0 || (decision.status !== "accepted" && baseDecision?.fields.status === decision.status)) {
+    const dropped = droppedLinks({ decision, baseDecision });
+    if (
+      (changed.length === 0 && dropped.length === 0) ||
+      (decision.status !== "accepted" && baseDecision?.fields.status === decision.status)
+    ) {
       continue;
     }
     const headClassifier = config.classifiers[name];
@@ -92,9 +101,11 @@ export async function signoff({
       decisionId: decision.id,
       classifier: name,
       model: (classifier ?? headClassifier)?.model ?? "unknown",
-      changed: changed.map((link) => link.check),
+      changed: [...new Set([...changed.map((link) => link.check), ...dropped])].sort(compareText),
     };
-    const blocker = decisionBlocker({ decision, baseState, base });
+    const blocker =
+      decisionBlocker({ decision, baseState, base }) ??
+      (dropped.length > 0 ? `links removed or moved in this pull request: ${dropped.join(", ")}` : undefined);
     if (blocker !== undefined) {
       outcomes.push({ ...identity, verdict: "needs-human", detail: blocker });
       continue;
@@ -114,6 +125,57 @@ export async function signoff({
       changes: prepared.changes,
     };
     outcomes.push({ ...identity, ...verdictFor({ result: await classify({ payload, classifier, runtime }), classifier }) });
+  }
+  outcomes.push(
+    ...(await removedDecisions({ projectDirectory, base, baseConfig, headUris: new Set(decisions.map((decision) => decision.uri)) })),
+  );
+  return outcomes;
+}
+
+function droppedLinks({ decision, baseDecision }: { decision: Decision; baseDecision: BaseDecision | undefined }): string[] {
+  const head = new Set([
+    ...decision.supportedBy.map((link) => `supported_by ${link.check}`),
+    ...decision.enforcedBy.map((link) => `enforced_by ${link.check}`),
+  ]);
+  const dropped = (baseDecision?.links ?? [])
+    .filter((link) => !head.has(`${link.kind} ${link.check}`))
+    .map((link) => link.check);
+  return [...new Set(dropped)].sort(compareText);
+}
+
+async function removedDecisions({
+  projectDirectory,
+  base,
+  baseConfig,
+  headUris,
+}: {
+  projectDirectory: string;
+  base: string;
+  baseConfig: Config | undefined;
+  headUris: Set<string>;
+}): Promise<SignoffOutcome[]> {
+  if (baseConfig === undefined) {
+    return [];
+  }
+  const directory = posix.normalize(baseConfig.decisions);
+  const uris = (await filesAtRef({ projectDirectory, ref: base }))
+    .filter((uri) => posix.dirname(uri) === directory && uri.endsWith(".yaml") && !headUris.has(uri))
+    .sort(compareText);
+  const outcomes: SignoffOutcome[] = [];
+  for (const uri of uris) {
+    const baseState = await decisionAtRef({ projectDirectory, ref: base, uri, defaultSignoff: baseConfig.signoff.default });
+    const name = baseState.status === "present" ? classifierName(baseState.decision.signoff) : undefined;
+    if (baseState.status !== "present" || name === undefined || baseState.decision.links.length === 0) {
+      continue;
+    }
+    outcomes.push({
+      decisionId: baseState.decision.id,
+      classifier: name,
+      model: baseConfig.classifiers[name]?.model ?? "unknown",
+      changed: [...new Set(baseState.decision.links.map((link) => link.check))].sort(compareText),
+      verdict: "needs-human",
+      detail: "decision removed in this pull request",
+    });
   }
   return outcomes;
 }
@@ -159,14 +221,21 @@ async function decisionAtRef({
     return { status: "unreadable" };
   }
   const fingerprints = new Map<string, string>();
-  for (const link of [...arrayOf(document.supported_by), ...arrayOf(document.enforced_by)]) {
-    if (isRecord(link) && typeof link.check === "string" && typeof link.fingerprint === "string") {
-      fingerprints.set(link.check, link.fingerprint);
+  const links: BaseLink[] = [];
+  for (const kind of ["supported_by", "enforced_by"] as const) {
+    for (const link of arrayOf(document[kind])) {
+      if (isRecord(link) && typeof link.check === "string") {
+        links.push({ kind, check: link.check });
+        if (typeof link.fingerprint === "string") {
+          fingerprints.set(link.check, link.fingerprint);
+        }
+      }
     }
   }
   return {
     status: "present",
     decision: {
+      id: typeof document.id === "string" ? document.id : uri,
       signoff: typeof document.signoff === "string" ? document.signoff : defaultSignoff,
       fields: {
         status: document.status,
@@ -175,6 +244,7 @@ async function decisionAtRef({
         because: document.because,
       },
       fingerprints,
+      links,
     },
   };
 }
