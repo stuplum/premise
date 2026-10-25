@@ -44,6 +44,7 @@ export type Decision = {
   supportedBy: CheckLink[];
   enforcedBy: CheckLink[];
   signoff: SignoffMode;
+  owners: string[];
   supersedes?: string;
   uri: string;
 };

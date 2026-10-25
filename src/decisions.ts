@@ -21,6 +21,7 @@ type DecisionDocument = {
   supported_by?: CheckLink[];
   enforced_by?: CheckLink[];
   signoff?: SignoffMode;
+  owners?: string[];
   supersedes?: string;
 };
 
@@ -84,6 +85,7 @@ async function readDecision({
     supportedBy: linksOf(decision.supported_by),
     enforcedBy: linksOf(decision.enforced_by),
     signoff: decision.signoff ?? config.signoff.default,
+    owners: decision.owners ?? [],
     supersedes: decision.supersedes,
     uri,
   };

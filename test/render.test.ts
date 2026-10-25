@@ -25,6 +25,7 @@ const decision: Decision = {
   supportedBy: [{ check: "DET-001" }],
   enforcedBy: [{ check: "no-test-runner-imports", fingerprint: `sha256:${"a".repeat(64)}` }],
   signoff: "human",
+  owners: [],
   supersedes: "ADR-001",
   uri: "decisions/ADR-002.yaml",
 };

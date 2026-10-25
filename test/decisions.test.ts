@@ -28,6 +28,17 @@ test("an ADR file maps to a decision with defaults filled", async (t) => {
   assert.deepEqual(decision?.enforcedBy, []);
   assert.deepEqual(decision?.scope, []);
   assert.equal(decision?.signoff, "human");
+  assert.deepEqual(decision?.owners, []);
+});
+
+test("owners are GitHub usernames", async (t) => {
+  const [decision] = await load({ t, files: withDecisions([createDecision({ id: "ADR-001", owners: ["stuplum", "a-b1"] })]) });
+
+  assert.deepEqual(decision?.owners, ["stuplum", "a-b1"]);
+  await assertConfigurationError({
+    action: load({ t, files: withDecisions([createDecision({ id: "ADR-001", owners: ["@stuplum"] })]) }),
+    pattern: /decisions\/ADR-001\.yaml: \/owners\/0/,
+  });
 });
 
 test("a file whose name differs from its id is rejected", async (t) => {

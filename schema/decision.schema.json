@@ -31,6 +31,11 @@
     "supported_by": { "$ref": "#/definitions/checks" },
     "enforced_by": { "$ref": "#/definitions/checks" },
     "signoff": { "type": "string", "pattern": "^(human|none|classifier:[a-z][a-z0-9-]*)$" },
+    "owners": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$" }
+    },
     "supersedes": { "$ref": "#/definitions/identifier" }
   },
   "definitions": {
