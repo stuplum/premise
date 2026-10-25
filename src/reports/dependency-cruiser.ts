@@ -15,7 +15,11 @@ export function parseDependencyCruiser({ content, uri }: { content: string; uri:
     throw new ConfigurationError(`${uri}: not a dependency-cruiser JSON report`);
   }
   const summary = document.summary;
-  const blindReason = blindnessOf({ modules: document.modules, optionsUsed: summary.optionsUsed as Record<string, unknown> });
+  const blindReason = blindnessOf({
+    modules: document.modules,
+    optionsUsed: summary.optionsUsed as Record<string, unknown>,
+    ignored: summary.ignore,
+  });
   const violated = new Set(
     (summary.violations as unknown[]).flatMap((violation) =>
       isRecord(violation) && isRecord(violation.rule) && typeof violation.rule.name === "string" ? [violation.rule.name] : [],
@@ -31,7 +35,7 @@ export function parseDependencyCruiser({ content, uri }: { content: string; uri:
               name: rule.name,
               definition: { name: rule.name, severity: rule.severity, from: rule.from, to: rule.to },
               violated: violated.has(rule.name),
-              blindReason,
+              blindReason: blindReason ?? (rule.severity === "ignore" ? "rule severity is ignore, so it is not checked" : undefined),
               source: uri,
             },
           ]
@@ -42,9 +46,11 @@ export function parseDependencyCruiser({ content, uri }: { content: string; uri:
 function blindnessOf({
   modules,
   optionsUsed,
+  ignored,
 }: {
   modules: unknown[];
   optionsUsed: Record<string, unknown>;
+  ignored: unknown;
 }): string | undefined {
   const unresolved = modules
     .filter(isRecord)
@@ -63,6 +69,12 @@ function blindnessOf({
   }
   if (optionsUsed.exclude !== undefined) {
     return "exclude can hide unresolved imports";
+  }
+  if (optionsUsed.knownViolations !== undefined) {
+    return "known violations are ignored";
+  }
+  if (typeof ignored === "number" && ignored > 0) {
+    return `${ignored} violations were ignored`;
   }
   return undefined;
 }

@@ -55,6 +55,33 @@ test("includeOnly and exclude make every rule blind", () => {
   assert.equal(exclude[0]?.blindReason, "exclude can hide unresolved imports");
 });
 
+test("a rule with severity ignore is unknown, not passed", () => {
+  const rules = parseDependencyCruiser({
+    content: dependencyCruiserReport({ rules: [noDb, { ...noDb, name: "no-cache", severity: "ignore" }] }),
+    uri,
+  });
+
+  assert.deepEqual(
+    rules.map((rule) => [rule.name, rule.blindReason]),
+    [["no-db", undefined], ["no-cache", "rule severity is ignore, so it is not checked"]],
+  );
+});
+
+test("ignored known violations make every rule blind", () => {
+  const knownViolations = parseDependencyCruiser({
+    content: dependencyCruiserReport({ rules: [noDb], optionsUsed: { knownViolations: [] } }),
+    uri,
+  });
+  const ignoredCount = JSON.parse(dependencyCruiserReport({ rules: [noDb] }));
+  ignoredCount.summary.ignore = 2;
+
+  assert.equal(knownViolations[0]?.blindReason, "known violations are ignored");
+  assert.equal(
+    parseDependencyCruiser({ content: JSON.stringify(ignoredCount), uri })[0]?.blindReason,
+    "2 violations were ignored",
+  );
+});
+
 test("a report without the expected fields is rejected", () => {
   assert.throws(
     () => parseDependencyCruiser({ content: "{}", uri }),
