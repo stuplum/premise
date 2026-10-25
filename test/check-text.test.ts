@@ -71,9 +71,9 @@ test("a tagged pickle includes background steps and example values", async (t) =
     text,
     [
       "pickle features/payments.feature",
-      "Context a ledger",
-      "Action 1 payments are made",
-      "Outcome the total is 10",
+      '{"text":"a ledger","type":"Context"}',
+      '{"text":"1 payments are made","type":"Action"}',
+      '{"text":"the total is 10","type":"Outcome"}',
       "",
     ].join("\n"),
   );
@@ -113,6 +113,20 @@ test("changing a step or an example value changes the text", async (t) => {
   assert.notEqual(example, original);
 });
 
+test("table cells and doc strings cannot be confused with other table shapes or steps", async (t) => {
+  const table = (rows: string[]) =>
+    ["Feature: Import", "  @IMP-001", "  Scenario: rows", "    Given these rows", ...rows.map((row) => `      ${row}`), ""].join("\n");
+  const docString = (lines: string[]) =>
+    ["Feature: Import", "  @IMP-001", "  Scenario: body", "    Given this body", '      """', ...lines.map((line) => `      ${line}`), '      """', ""].join("\n");
+  const textOf = (feature: string) => textFor({ t, id: "IMP-001", files: { "features/import.feature": feature } });
+
+  assert.notEqual(await textOf(table(["| a | b |"])), await textOf(table(["| a \\| b |"])));
+  assert.notEqual(
+    await textOf(docString(["Action c"])),
+    await textOf(["Feature: Import", "  @IMP-001", "  Scenario: body", "    Given this body", "    When c", ""].join("\n")),
+  );
+});
+
 test("doc strings and data tables are part of the text", async (t) => {
   const feature = [
     "Feature: Import",
@@ -135,14 +149,8 @@ test("doc strings and data tables are part of the text", async (t) => {
     text,
     [
       "pickle features/import.feature",
-      "Context these rows",
-      "| a | b |",
-      "| 1 | 2 |",
-      "Outcome the body is",
-      '"""',
-      "hello",
-      "world",
-      '"""',
+      '{"rows":[["a","b"],["1","2"]],"text":"these rows","type":"Context"}',
+      '{"docString":"hello\\nworld","text":"the body is","type":"Outcome"}',
       "",
     ].join("\n"),
   );

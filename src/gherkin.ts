@@ -6,6 +6,7 @@ import { glob } from "glob";
 import { minimatch } from "minimatch";
 import { ConfigurationError } from "./errors.js";
 import type { Config } from "./model.js";
+import { stableJson } from "./stable-json.js";
 import { compareText } from "./text.js";
 
 export type GherkinFile = { uri: string; pickles: Pickle[] };
@@ -60,18 +61,15 @@ export function gherkinText({ id, files }: { id: string; files: GherkinFile[] })
 }
 
 function pickleLines({ pickle, uri }: { pickle: Pickle; uri: string }): string[] {
-  return [
-    `pickle ${uri}`,
-    ...pickle.steps.flatMap((step) => [`${step.type ?? "Unknown"} ${step.text}`, ...argumentLines(step.argument)]),
-  ];
+  return [`pickle ${uri}`, ...pickle.steps.map((step) => stableJson({ type: step.type ?? "Unknown", text: step.text, ...argumentFields(step.argument) }))];
 }
 
-function argumentLines(argument: PickleStepArgument | undefined): string[] {
+function argumentFields(argument: PickleStepArgument | undefined): Record<string, unknown> {
   if (argument?.docString) {
-    return ['"""', ...argument.docString.content.split("\n"), '"""'];
+    return { docString: argument.docString.content, mediaType: argument.docString.mediaType };
   }
   if (argument?.dataTable) {
-    return argument.dataTable.rows.map((row) => `| ${row.cells.map((cell) => cell.value).join(" | ")} |`);
+    return { rows: argument.dataTable.rows.map((row) => row.cells.map((cell) => cell.value)) };
   }
-  return [];
+  return {};
 }

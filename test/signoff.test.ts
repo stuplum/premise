@@ -25,7 +25,7 @@ function feature(outcome: string): string {
 }
 
 function textOf(outcome: string): string {
-  return `pickle features/payments.feature\nAction a payment is made\nOutcome ${outcome}\n`;
+  return `pickle features/payments.feature\n{"text":"a payment is made","type":"Action"}\n{"text":${JSON.stringify(outcome)},"type":"Outcome"}\n`;
 }
 
 function respondWith(probability: number): string {
