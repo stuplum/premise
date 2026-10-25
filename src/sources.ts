@@ -1,8 +1,10 @@
 import { readFile, realpath, stat } from "node:fs/promises";
 import { isAbsolute, join, relative, sep } from "node:path";
-import type { CheckSources } from "./check-text.js";
+import { minimatch } from "minimatch";
+import type { CheckSources, TestFile } from "./check-text.js";
 import { ConfigurationError } from "./errors.js";
-import { loadGherkinFiles } from "./gherkin.js";
+import { loadGherkinFiles, parsePickles, type GherkinFile } from "./gherkin.js";
+import { filesAtRef, readAtRef } from "./git.js";
 import type { Config } from "./model.js";
 import type { Reports, RuleDefinition } from "./reports/model.js";
 import { parseJson } from "./reports/parse-json.js";
@@ -96,4 +98,54 @@ async function projectFile({ root, file }: { root: string; file: string }): Prom
   } catch {
     return undefined;
   }
+}
+
+export async function sourcesAtCommit({
+  projectDirectory,
+  config,
+  reports,
+  commit,
+}: {
+  projectDirectory: string;
+  config: Config;
+  reports: Reports;
+  commit: string;
+}): Promise<CheckSources> {
+  const pattern = config.gherkin;
+  const gherkinUris =
+    pattern === undefined
+      ? []
+      : (await filesAtRef({ projectDirectory, ref: commit }))
+          .filter((uri) => minimatch(uri, pattern, { dot: true }))
+          .sort(compareText);
+  const gherkin: GherkinFile[] = [];
+  for (const uri of gherkinUris) {
+    gherkin.push({ uri, pickles: parsePickles({ content: (await readAtRef({ projectDirectory, ref: commit, uri })) ?? "", uri }) });
+  }
+  const configContent =
+    config.dependencyCruiserConfig === undefined
+      ? undefined
+      : await readAtRef({ projectDirectory, ref: commit, uri: config.dependencyCruiserConfig });
+  return {
+    gherkin,
+    rules:
+      configContent === undefined || config.dependencyCruiserConfig === undefined
+        ? []
+        : configRules({ content: configContent, uri: config.dependencyCruiserConfig }),
+    testFiles: async (id) => {
+      const paths = await testFilePaths({ projectDirectory, reports, id });
+      if (paths === undefined) {
+        return undefined;
+      }
+      const files: TestFile[] = [];
+      for (const path of paths) {
+        const content = await readAtRef({ projectDirectory, ref: commit, uri: path });
+        if (content === undefined) {
+          return undefined;
+        }
+        files.push({ path, content });
+      }
+      return files;
+    },
+  };
 }

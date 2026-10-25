@@ -106,3 +106,5 @@ export function dependencyCruiserReport({
     },
   });
 }
+
+export const noDbRule = { name: "no-db", severity: "error", from: { path: "^src" }, to: { path: "pg" } };
