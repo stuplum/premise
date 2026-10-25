@@ -33,5 +33,5 @@ premise render --out docs/adr    # Markdown views of every ADR
 - [Getting started](docs/getting-started.md)
 - [Reference](docs/reference.md)
 - [Why Premise exists](docs/purpose.md)
-- [Experiment results](docs/experiments/decision-enforcement-matrix.md)
+- [Documentation index](docs/README.md), including historical experiments
 - [Contributing](CONTRIBUTING.md)

@@ -85,3 +85,9 @@ Before choosing a report format, field or feature, identify:
 
 If we cannot demonstrate that connection, we have added tooling or documentation,
 not yet demonstrated the reason Premise exists.
+
+## Further reading
+
+- [Getting started](getting-started.md) for the supported adoption workflow.
+- [Reference](reference.md) for every field, state and command.
+- [Documentation index](README.md) for guides, reference material and experiments.

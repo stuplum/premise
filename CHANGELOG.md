@@ -11,9 +11,21 @@
 - Adds `premise signoff --base` with `jev` and `command` classifier adapters.
 - Treats dependency-cruiser rules as unknown when the report has unresolved imports or uses `includeOnly` or `exclude`.
 - Removes the Cucumber and dependency-cruiser providers, the `./cucumber` export, review receipts, `premise review`,
-  `premise test`, the `.decision` grammar, onboarding prompts and Node.js 20 support.
+  `premise test`, the `.decision` grammar, onboarding prompts, the agent lifecycle hooks with their OMP, Codex and
+  Claude Code integrations, and Node.js 20 support.
 
 ## 0.2.0 - 2026-10-02
+
+- Adds opt-in agent lifecycle checks with session-start decision snapshots,
+  current artifact context, and completion blocking until executable premises
+  and deliberate decision reviews are satisfied.
+- Adds OMP integration and Codex and Claude Code plugins with cached-installation
+  support, bounded hook waits, and protection against stale or interrupted checks.
+- Adds optional pinned-model Jev advice without turning model judgement or
+  service availability into executable evidence.
+- Reloads executable dependency-cruiser configuration and its imports in fresh
+  Node processes; rejects dangling repository configuration instead of silently
+  using defaults.
 
 - Reserves canonical provider, premise type, dialect, and evidence-role
   identifiers, with independent `namespace:name` extensions for third parties.
@@ -29,6 +41,8 @@
   dry runs, outcomes and coverage evidence including shared backgrounds.
 - Clarifies repository-owned premise identity and provider-owned metadata
   binding, with native and sidecar OpenAPI examples using the existing API.
+- Separates installation, agent setup, and command and configuration reference
+  into focused guides with runnable examples and a documentation index.
 
 ## 0.1.1 - 2026-09-24
 

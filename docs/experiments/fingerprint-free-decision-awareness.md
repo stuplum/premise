@@ -1,5 +1,7 @@
 # Fingerprint-free decision awareness
 
+Historical prototype. The working-tree mechanism below is not the current review lifecycle; see [review receipts](../decisions.md#review-receipts) for supported behaviour.
+
 ## Question
 
 Can Premise bring a relevant architecture decision back into an agent's context
@@ -57,3 +59,5 @@ Run a blinded agent trial in which changed Gherkin invalidates an assumption in
 a linked decision. Compare whether the agent reconsiders or supersedes the
 decision when Premise supplies the linked raw sources versus when it receives only
 the repository change.
+
+[All experiments and documentation](../README.md#experiments)

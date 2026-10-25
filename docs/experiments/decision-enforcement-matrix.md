@@ -1,5 +1,7 @@
 # Decision-enforcement matrix
 
+Experiment report. The results apply to the small fixture and conditions described below, not a general claim about agent reasoning.
+
 ## Question
 
 Does Premise add anything beyond ordinary requirements or Gherkin when an agent
@@ -58,3 +60,5 @@ is smaller and cleaner than the mature repositories that motivated Premise. The
 next trial should reuse this matrix against a real change in a documentation-
 heavy repository where the relevant decision is difficult to discover. Token
 usage was unavailable and should be captured if a future runner exposes it.
+
+[All experiments and documentation](../README.md#experiments)
