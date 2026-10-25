@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
-import { access, readFile } from "node:fs/promises";
+import { access, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { test, type TestContext } from "node:test";
+import { parse, stringify } from "yaml";
 import { JEV_ENDPOINT, type ClassifierRuntime } from "../src/classifiers/types.js";
 import { fingerprintOf } from "../src/fingerprint.js";
 import { refreshDecision } from "../src/refresh.js";
@@ -41,7 +42,7 @@ function signoffConfig({
   return {
     gherkin: "features/**/*.feature",
     reports: [{ format: "cucumber-json", path: "reports/cucumber.json" }],
-    signoff: { default: "human", allowed: ["human", "classifier:local"] },
+    signoff: { default: "human", allowed: ["human", "none", "classifier:local"] },
     classifiers: { local: { adapter: "command", command: ["node", "judge.mjs"], model: "judge-1", thresholds } },
   };
 }
@@ -83,6 +84,64 @@ function runtimeFor(projectDirectory: string): ClassifierRuntime {
 async function received(projectDirectory: string) {
   return JSON.parse(await readFile(join(projectDirectory, "received.json"), "utf8"));
 }
+
+async function editDecision({
+  projectDirectory,
+  changes,
+}: {
+  projectDirectory: string;
+  changes: Record<string, unknown>;
+}): Promise<void> {
+  const path = join(projectDirectory, "decisions/ADR-001.yaml");
+  await writeFile(path, stringify({ ...parse(await readFile(path, "utf8")), ...changes }));
+}
+
+test("reasons rewritten in the pull request need a human", async (t) => {
+  const projectDirectory = await signedThenChanged({ t, respond: respondWith(0.93) });
+  await editDecision({ projectDirectory, changes: { because: ["The total can be any value."] } });
+
+  const outcomes = await signoff({ projectDirectory, base: "HEAD", runtime: runtimeFor(projectDirectory) });
+
+  assert.equal(outcomes[0]?.verdict, "needs-human");
+  assert.equal(outcomes[0]?.detail, "decision changed in this pull request: because");
+});
+
+test("switching a classifier-signed decision to no sign-off in the pull request needs a human", async (t) => {
+  const projectDirectory = await signedThenChanged({ t, respond: respondWith(0.93) });
+  await editDecision({ projectDirectory, changes: { signoff: "none" } });
+
+  const outcomes = await signoff({ projectDirectory, base: "HEAD", runtime: runtimeFor(projectDirectory) });
+
+  assert.equal(outcomes[0]?.verdict, "needs-human");
+  assert.equal(outcomes[0]?.detail, "decision changed in this pull request: signoff");
+});
+
+test("switching a human-signed decision to a classifier in the pull request needs a human", async (t) => {
+  const projectDirectory = await createSignoffProject({ t, respond: respondWith(0.93), decision: classifierDecision({ signoff: "human" }) });
+  await refreshDecision({ projectDirectory, decisionId: "ADR-001" });
+  commitAll({ projectDirectory, message: "base" });
+  await editDecision({ projectDirectory, changes: { signoff: "classifier:local" } });
+  await writeFiles({ projectDirectory, files: { "features/payments.feature": feature("the total is 11") } });
+  await refreshDecision({ projectDirectory, decisionId: "ADR-001" });
+
+  const outcomes = await signoff({ projectDirectory, base: "HEAD", runtime: runtimeFor(projectDirectory) });
+
+  assert.equal(outcomes[0]?.verdict, "needs-human");
+  assert.equal(outcomes[0]?.detail, "sign-off changed from human to classifier:local in this pull request");
+});
+
+test("a classifier-signed decision added in the pull request needs a human", async (t) => {
+  const projectDirectory = await createSignoffProject({ t, respond: respondWith(0.93), decision: classifierDecision({ id: "ADR-002" }) });
+  await rm(join(projectDirectory, "decisions/ADR-002.yaml"));
+  commitAll({ projectDirectory, message: "base" });
+  await writeFiles({ projectDirectory, files: decisionFiles({ decisions: [classifierDecision()] }) });
+  await refreshDecision({ projectDirectory, decisionId: "ADR-001" });
+
+  const outcomes = await signoff({ projectDirectory, base: "HEAD", runtime: runtimeFor(projectDirectory) });
+
+  assert.equal(outcomes[0]?.verdict, "needs-human");
+  assert.equal(outcomes[0]?.detail, "decision is new in this pull request");
+});
 
 test("a classifier configuration changed in the pull request needs a human", async (t) => {
   const projectDirectory = await signedThenChanged({ t, respond: respondWith(0.05) });

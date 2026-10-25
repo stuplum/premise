@@ -39,6 +39,14 @@ type PreparedChanges =
   | { status: "ready"; changes: SignoffPayload["changes"] }
   | { status: "blocked"; reason: string };
 
+type BaseDecision = {
+  signoff: string;
+  fields: { status: unknown; title: unknown; context: unknown; because: unknown };
+  fingerprints: Map<string, string>;
+};
+
+type BaseState = { status: "absent" } | { status: "unreadable" } | { status: "present"; decision: BaseDecision };
+
 export async function signoff({
   projectDirectory,
   base,
@@ -62,18 +70,35 @@ export async function signoff({
   };
   const outcomes: SignoffOutcome[] = [];
   for (const decision of decisions) {
-    const name = classifierName(decision.signoff);
-    if (decision.status !== "accepted" || name === undefined) {
+    const baseState = await decisionAtRef({
+      projectDirectory,
+      ref: base,
+      uri: decision.uri,
+      defaultSignoff: baseConfig?.signoff.default ?? "human",
+    });
+    const baseDecision = baseState.status === "present" ? baseState.decision : undefined;
+    const name = classifierName(baseDecision?.signoff ?? decision.signoff) ?? classifierName(decision.signoff);
+    if (name === undefined) {
       continue;
     }
-    const baseFingerprints = await fingerprintsAtRef({ projectDirectory, ref: base, uri: decision.uri });
+    const baseFingerprints = baseDecision?.fingerprints ?? new Map<string, string>();
     const changed = changedLinks({ decision, baseFingerprints });
-    if (changed.length === 0) {
+    if (changed.length === 0 || (decision.status !== "accepted" && baseDecision?.fields.status === decision.status)) {
       continue;
     }
-    const headClassifier = config.classifiers[name] as ClassifierConfig;
+    const headClassifier = config.classifiers[name];
     const classifier = baseConfig?.classifiers[name];
-    const identity = { decisionId: decision.id, classifier: name, model: headClassifier.model, changed: changed.map((link) => link.check) };
+    const identity = {
+      decisionId: decision.id,
+      classifier: name,
+      model: (classifier ?? headClassifier)?.model ?? "unknown",
+      changed: changed.map((link) => link.check),
+    };
+    const blocker = decisionBlocker({ decision, baseState, base });
+    if (blocker !== undefined) {
+      outcomes.push({ ...identity, verdict: "needs-human", detail: blocker });
+      continue;
+    }
     if (classifier === undefined || stableJson(classifier) !== stableJson(headClassifier)) {
       outcomes.push({ ...identity, verdict: "needs-human", detail: `classifier ${name} is not configured the same at ${base}` });
       continue;
@@ -109,35 +134,80 @@ export function signoffExitCode({ outcomes }: { outcomes: SignoffOutcome[] }): 0
   return outcomes.every((outcome) => outcome.verdict === "passed") ? 0 : 1;
 }
 
-async function fingerprintsAtRef({
+async function decisionAtRef({
   projectDirectory,
   ref,
   uri,
+  defaultSignoff,
 }: {
   projectDirectory: string;
   ref: string;
   uri: string;
-}): Promise<Map<string, string>> {
-  const fingerprints = new Map<string, string>();
+  defaultSignoff: string;
+}): Promise<BaseState> {
   const content = await readAtRef({ projectDirectory, ref, uri });
   if (content === undefined) {
-    return fingerprints;
+    return { status: "absent" };
   }
   let document: unknown;
   try {
     document = parse(content);
   } catch {
-    return fingerprints;
+    return { status: "unreadable" };
   }
   if (!isRecord(document)) {
-    return fingerprints;
+    return { status: "unreadable" };
   }
+  const fingerprints = new Map<string, string>();
   for (const link of [...arrayOf(document.supported_by), ...arrayOf(document.enforced_by)]) {
     if (isRecord(link) && typeof link.check === "string" && typeof link.fingerprint === "string") {
       fingerprints.set(link.check, link.fingerprint);
     }
   }
-  return fingerprints;
+  return {
+    status: "present",
+    decision: {
+      signoff: typeof document.signoff === "string" ? document.signoff : defaultSignoff,
+      fields: {
+        status: document.status,
+        title: document.title,
+        context: document.context,
+        because: document.because,
+      },
+      fingerprints,
+    },
+  };
+}
+
+function decisionBlocker({
+  decision,
+  baseState,
+  base,
+}: {
+  decision: Decision;
+  baseState: BaseState;
+  base: string;
+}): string | undefined {
+  if (baseState.status === "absent") {
+    return "decision is new in this pull request";
+  }
+  if (baseState.status === "unreadable") {
+    return `decision at ${base} cannot be read`;
+  }
+  const baseDecision = baseState.decision;
+  if (classifierName(baseDecision.signoff) === undefined) {
+    return `sign-off changed from ${baseDecision.signoff} to ${decision.signoff} in this pull request`;
+  }
+  const headFields: Record<string, unknown> = {
+    signoff: decision.signoff,
+    status: decision.status,
+    title: decision.title,
+    context: decision.context,
+    because: decision.because,
+  };
+  const baseFields: Record<string, unknown> = { signoff: baseDecision.signoff, ...baseDecision.fields };
+  const changed = Object.keys(headFields).filter((field) => stableJson(headFields[field]) !== stableJson(baseFields[field]));
+  return changed.length > 0 ? `decision changed in this pull request: ${changed.join(", ")}` : undefined;
 }
 
 async function configAtRef({ projectDirectory, ref }: { projectDirectory: string; ref: string }): Promise<Config | undefined> {

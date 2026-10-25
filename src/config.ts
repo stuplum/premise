@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { ConfigurationError } from "./errors.js";
-import type { ClassifierConfig, Config, SignoffMode } from "./model.js";
+import type { ClassifierConfig, Config } from "./model.js";
 import { parseYaml, validateAgainst } from "./schema.js";
 
 export const CONFIG_FILE = "premise.yaml";
@@ -27,7 +27,7 @@ export function parseConfig({ content }: { content: string }): Config {
   return config;
 }
 
-export function classifierName(mode: SignoffMode): string | undefined {
+export function classifierName(mode: string): string | undefined {
   return mode.startsWith("classifier:") ? mode.slice("classifier:".length) : undefined;
 }
 
