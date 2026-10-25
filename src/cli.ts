@@ -3,6 +3,7 @@ import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { defaultRuntime } from "./classifiers/types.js";
+import { decisionsForFile, formatContext } from "./context.js";
 import { ConfigurationError, RefusedError } from "./errors.js";
 import { evaluateRepository } from "./evaluate.js";
 import { checkExitCode, formatEvaluations } from "./format.js";
@@ -21,6 +22,8 @@ export async function run({ args, projectDirectory }: { args: string[]; projectD
       return runRefresh({ args: rest, projectDirectory });
     case "signoff":
       return runSignoff({ args: rest, projectDirectory });
+    case "context":
+      return runContext({ args: rest, projectDirectory });
     default:
       throw new ConfigurationError(usage);
   }
@@ -46,6 +49,12 @@ async function runSignoff({ args, projectDirectory }: { args: string[]; projectD
   const outcomes = await signoff({ projectDirectory, base, runtime: defaultRuntime({ projectDirectory }) });
   process.stdout.write(formatSignoff({ outcomes }));
   return signoffExitCode({ outcomes });
+}
+
+async function runContext({ args, projectDirectory }: { args: string[]; projectDirectory: string }): Promise<number> {
+  requireArgumentCount({ args, count: 1 });
+  process.stdout.write(formatContext(await decisionsForFile({ projectDirectory, file: args[0] ?? "" })));
+  return 0;
 }
 
 function requireArgumentCount({ args, count }: { args: string[]; count: number }): void {

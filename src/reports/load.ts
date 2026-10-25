@@ -9,6 +9,7 @@ import { parseCucumberJson } from "./cucumber-json.js";
 import { parseDependencyCruiser } from "./dependency-cruiser.js";
 import { parseJunit } from "./junit.js";
 import type { Reports } from "./model.js";
+import type { RuleResult } from "./model.js";
 
 export async function loadReports({
   projectDirectory,
@@ -46,4 +47,25 @@ export async function reportFiles({
 }): Promise<string[]> {
   const uris = await glob(pattern, { cwd: projectDirectory, nodir: true, dot: true, posix: true });
   return uris.sort(compareText);
+}
+
+export async function loadAvailableRules({
+  projectDirectory,
+  config,
+}: {
+  projectDirectory: string;
+  config: Config;
+}): Promise<{ rules: RuleResult[]; missing: string[] }> {
+  const rules: RuleResult[] = [];
+  const missing: string[] = [];
+  for (const report of config.reports.filter((candidate) => candidate.format === "dependency-cruiser")) {
+    const uris = await reportFiles({ projectDirectory, pattern: report.path });
+    if (uris.length === 0) {
+      missing.push(report.path);
+    }
+    for (const uri of uris) {
+      rules.push(...parseDependencyCruiser({ content: await readFile(join(projectDirectory, uri), "utf8"), uri }));
+    }
+  }
+  return { rules, missing };
 }
