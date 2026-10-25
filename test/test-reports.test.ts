@@ -107,6 +107,48 @@ test("Cucumber background elements are not scenarios", () => {
   assert.deepEqual(cases, []);
 });
 
+function jvmFeature(elements: unknown[]): string {
+  return JSON.stringify([{ uri: "features/example.feature", elements }]);
+}
+
+function result(status: string) {
+  return { result: { status } };
+}
+
+test("Cucumber scenario and step hooks count towards the outcome", () => {
+  const cases = parseCucumberJson({
+    content: jvmFeature([
+      { type: "scenario", tags: [{ name: "@AFTER" }], steps: [result("passed")], after: [result("failed")] },
+      { type: "scenario", tags: [{ name: "@BEFORE" }], before: [result("failed")], steps: [result("skipped")] },
+      { type: "scenario", tags: [{ name: "@STEP" }], steps: [{ ...result("passed"), after: [result("failed")] }] },
+      { type: "scenario", tags: [{ name: "@CLEAN" }], before: [result("passed")], steps: [result("passed")], after: [result("passed")] },
+    ]),
+    uri: cucumberUri,
+  });
+
+  assert.deepEqual(
+    cases.map((testCase) => [testCase.checks, testCase.outcome]),
+    [[["AFTER"], "failed"], [["BEFORE"], "failed"], [["STEP"], "failed"], [["CLEAN"], "passed"]],
+  );
+});
+
+test("a failed background step fails the scenario that follows it", () => {
+  const cases = parseCucumberJson({
+    content: jvmFeature([
+      { type: "background", steps: [result("failed")] },
+      { type: "scenario", tags: [{ name: "@FIRST" }], steps: [result("skipped")] },
+      { type: "background", steps: [result("passed")] },
+      { type: "scenario", tags: [{ name: "@SECOND" }], steps: [result("passed")] },
+    ]),
+    uri: cucumberUri,
+  });
+
+  assert.deepEqual(
+    cases.map((testCase) => [testCase.checks, testCase.outcome]),
+    [[["FIRST"], "failed"], [["SECOND"], "passed"]],
+  );
+});
+
 test("malformed Cucumber JSON is a configuration error naming the report", () => {
   rejects({ action: () => parseCucumberJson({ content: "{", uri: cucumberUri }), pattern: /reports\/cucumber\.json: invalid JSON/ });
   rejects({ action: () => parseCucumberJson({ content: "{}", uri: cucumberUri }), pattern: /must be an array of features/ });

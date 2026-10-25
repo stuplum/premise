@@ -21,22 +21,38 @@ function featureCases({ feature, uri }: { feature: unknown; uri: string }): Test
     throw malformed({ uri, detail: `${feature.uri} elements is not an array` });
   }
   const file = feature.uri;
-  return elements
-    .filter((element) => !(isRecord(element) && element.type === "background"))
-    .map((element) => scenarioCase({ element, file, uri }));
+  const cases: TestCase[] = [];
+  let background: string[] = [];
+  for (const element of elements) {
+    if (isRecord(element) && element.type === "background") {
+      background = elementStatuses({ element, file, uri });
+      continue;
+    }
+    cases.push(scenarioCase({ element, file, uri, background }));
+    background = [];
+  }
+  return cases;
 }
 
-function scenarioCase({ element, file, uri }: { element: unknown; file: string; uri: string }): TestCase {
-  if (!isRecord(element) || !Array.isArray(element.steps)) {
-    throw malformed({ uri, detail: `scenario in ${file} without steps` });
-  }
-  const tags = element.tags ?? [];
+function scenarioCase({
+  element,
+  file,
+  uri,
+  background,
+}: {
+  element: unknown;
+  file: string;
+  uri: string;
+  background: string[];
+}): TestCase {
+  const statuses = [...background, ...elementStatuses({ element, file, uri })];
+  const tags = isRecord(element) ? (element.tags ?? []) : [];
   if (!Array.isArray(tags)) {
     throw malformed({ uri, detail: `scenario in ${file} has tags that are not an array` });
   }
   return {
     checks: tagTokens(tags.map((tag) => tagName({ tag, uri })).join(" ")),
-    outcome: outcomeOf(element.steps.map((step) => stepStatus({ step, uri }))),
+    outcome: outcomeOf(statuses),
     file,
     source: uri,
   };
@@ -54,6 +70,31 @@ function stepStatus({ step, uri }: { step: unknown; uri: string }): string {
     return step.result.status;
   }
   throw malformed({ uri, detail: "step without a result status" });
+}
+
+function elementStatuses({ element, file, uri }: { element: unknown; file: string; uri: string }): string[] {
+  if (!isRecord(element) || !Array.isArray(element.steps)) {
+    throw malformed({ uri, detail: `scenario in ${file} without steps` });
+  }
+  return [
+    ...hookStatuses({ hooks: element.before, uri }),
+    ...element.steps.flatMap((step) => [
+      ...hookStatuses({ hooks: isRecord(step) ? step.before : undefined, uri }),
+      stepStatus({ step, uri }),
+      ...hookStatuses({ hooks: isRecord(step) ? step.after : undefined, uri }),
+    ]),
+    ...hookStatuses({ hooks: element.after, uri }),
+  ];
+}
+
+function hookStatuses({ hooks, uri }: { hooks: unknown; uri: string }): string[] {
+  if (hooks === undefined) {
+    return [];
+  }
+  if (!Array.isArray(hooks)) {
+    throw malformed({ uri, detail: "hooks that are not an array" });
+  }
+  return hooks.map((hook) => stepStatus({ step: hook, uri }));
 }
 
 function outcomeOf(statuses: string[]): CaseOutcome {
