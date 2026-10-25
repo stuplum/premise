@@ -39,6 +39,6 @@ supported_by:
   - check: DET-001
     fingerprint: sha256:aaeaaa61987e50059fcd67cc0bd043f175134b3d9533d1b552f2c53727ce0b8f
 enforced_by:
-  - check: no-test-runner-imports
-    fingerprint: sha256:0ca565505c5cbe61dee135c3016ab1f54a836855944d7a701e719bbaf6b5d838
+  - check: no-check-runner-imports
+    fingerprint: sha256:7a6e41236ab494fc2dfac41eebc061b2c12e958810592332b867303abde9bf95
 supersedes: ADR-002

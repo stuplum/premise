@@ -1,11 +1,11 @@
 {
   "forbidden": [
     {
-      "name": "no-test-runner-imports",
-      "comment": "Premise reads reports; it never runs a test runner.",
+      "name": "no-check-runner-imports",
+      "comment": "Premise reads reports; it never runs the checks that produce them.",
       "severity": "warn",
       "from": { "path": "^src/" },
-      "to": { "path": "node_modules/(@cucumber/cucumber|tsx)/" }
+      "to": { "path": "node_modules/(@cucumber/cucumber|dependency-cruiser|tsx)/" }
     }
   ],
   "options": {
