@@ -55,7 +55,7 @@ Only `accepted` decisions are evaluated.
 | `cucumber-json` | `@<ID>` scenario tags | Any step failed: failed. All passed: passed. Otherwise skipped |
 | `dependency-cruiser` | Rule `name` | Violated: failed. Otherwise passed |
 
-Matching is exact on whole tokens. A check is `failed` if any matched case failed, `unknown` if no report contains it, any matched case was skipped, or a dependency-cruiser report has unresolved imports or uses `includeOnly` or `exclude`. Otherwise it is `passed`.
+Matching is exact on whole tokens. A check is `failed` if any matched case failed, `unknown` if no report contains it, any matched case was skipped, or a dependency-cruiser report has unresolved imports, uses `includeOnly` or `exclude`, ignores known violations, or the rule's severity is `ignore`. Otherwise it is `passed`. Cucumber hook results, and background steps reported as a separate element, count towards the scenario that runs them.
 
 ## Fingerprints and drift
 
@@ -64,7 +64,7 @@ Each link has `check` and, once signed, `fingerprint`: `sha256:` and the hex SHA
 | Source, first match wins | Normalised text |
 |---|---|
 | Gherkin scenarios tagged `@<ID>` | Steps with background and example values, tables and doc strings. Names, comments and formatting are ignored |
-| dependency-cruiser rule, from `dependency_cruiser_config` when set, otherwise from the report | `name`, `severity`, `from`, `to`, key-sorted. `comment` is ignored |
+| dependency-cruiser rule, from `dependency_cruiser_config` when set, otherwise from the report | `name`, `severity`, `from`, `module`, `to`, key-sorted. `comment` is ignored |
 | Test files named by JUnit `file` or `classname` | File contents with trailing whitespace and blank lines removed |
 
 ### Recovering the signed text
@@ -90,17 +90,21 @@ Recovery fails, and a human must sign off, when history is shallow or rewritten,
 - `none`: a stale decision is a warning.
 - `classifier:<name>`: `premise signoff --base <ref>` in PR CI sends the decision's `title`, `context`, `because` and the signed and current text of each changed link to the classifier. A probability at or above `established` passes; at or below `failed` means reconsider; anything else, an unavailable classifier, or signed text that cannot be recovered needs a human. Make the job a required check and check out full history.
 
+`signoff` trusts only the base branch: the decision's sign-off mode, status and reasons, and the classifier's configuration, come from `<ref>`. A pull request that changes any of these, removes or moves a signed link, or adds or deletes a classifier-signed decision needs a human.
+
 ### Adapters
 
 - `jev`: needs `TYPESAFE_AI_API_KEY`. The model must be pinned as `jev-N.N.N`.
-- `command`: runs `command` with `{ question, decision, changes, model }` as JSON on stdin and expects `{ "model": "<model>", "probability": <0..1> }` on stdout within 10 seconds.
+- `command`: runs `command` with `{ question, decision, changes, model }` as JSON on stdin and expects `{ "model": "<model>", "probability": <0..1> }` on stdout within 10 seconds and 1 MiB. On timeout, the command and every process it started are stopped.
 
 ## Commands
 
-| Command | Does |
-|---|---|
-| `premise check` | Prints every accepted decision's state and links |
-| `premise refresh <ID>` | Writes current fingerprints into a decision; refuses while a link fails, is unknown or has no text |
-| `premise signoff --base <ref>` | Runs classifiers for fingerprints that changed since `<ref>` in classifier-signed decisions |
-| `premise context <file>` | Lists accepted decisions whose `scope`, or linked dependency-cruiser rule `from` paths, match the file |
-| `premise render --out <dir>` | Writes `<ID>.md` for every decision |
+| Command | Does | Exits |
+|---|---|---|
+| `premise check` | Prints every accepted decision's state and links | `0` all hold (or stale with `signoff: none`), `1` otherwise |
+| `premise refresh <ID>` | Writes current fingerprints into a decision; refuses while a link fails, is unknown or has no text | `0` written, `1` refused |
+| `premise signoff --base <ref>` | Runs classifiers for fingerprints that changed since `<ref>` in classifier-signed decisions | `0` every outcome passed, `1` otherwise |
+| `premise context <file>` | Lists accepted decisions whose `scope`, or linked dependency-cruiser rule `from` paths, match the file | `0` |
+| `premise render --out <dir>` | Writes `<ID>.md` for every decision | `0` |
+
+Every command exits `2` on usage, configuration or report errors, including a `decisions` directory that does not exist.
