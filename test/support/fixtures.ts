@@ -74,3 +74,35 @@ export function cucumberJsonReport({ scenarios }: { scenarios: ScenarioFixture[]
 function escapeXml(value: string): string {
   return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
 }
+
+export type RuleFixture = {
+  name: string;
+  severity?: string;
+  comment?: string;
+  from?: Record<string, unknown>;
+  to?: Record<string, unknown>;
+};
+
+export function dependencyCruiserReport({
+  rules = [],
+  violations = [],
+  unresolved = false,
+  optionsUsed = {},
+}: {
+  rules?: RuleFixture[];
+  violations?: string[];
+  unresolved?: boolean;
+  optionsUsed?: Record<string, unknown>;
+} = {}): string {
+  return JSON.stringify({
+    modules: [
+      { source: "src/a.ts", dependencies: [{ resolved: unresolved ? "missing" : "src/b.ts", couldNotResolve: unresolved }] },
+      { source: "src/b.ts", dependencies: [] },
+    ],
+    summary: {
+      violations: violations.map((name) => ({ from: "src/a.ts", to: "src/b.ts", rule: { name, severity: "error" } })),
+      optionsUsed,
+      ruleSetUsed: { forbidden: rules },
+    },
+  });
+}
