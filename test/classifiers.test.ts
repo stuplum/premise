@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { test, type TestContext } from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
 import { classifyWithCommand } from "../src/classifiers/command.js";
 import { classifyWithJev } from "../src/classifiers/jev.js";
 import { JEV_ENDPOINT, type ClassifierResult } from "../src/classifiers/types.js";
@@ -68,6 +69,38 @@ test("a command that runs past the timeout is unavailable", async (t) => {
   });
 
   assertUnavailable({ result, pattern: /timed out after 200 ms/ });
+});
+
+async function exits(pid: number): Promise<boolean> {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    try {
+      process.kill(pid, 0);
+    } catch {
+      return true;
+    }
+    await delay(20);
+  }
+  return false;
+}
+
+test("a timeout also stops processes the command started", { skip: process.platform === "win32" && "POSIX process groups" }, async (t) => {
+  const projectDirectory = await createProject({ t, files: {} });
+
+  const result = await classifyWithCommand({
+    payload: createPayload(),
+    classifier: { ...commandClassifier, command: ["sh", "-c", "sleep 30 & echo $! > grandchild.pid; wait"] },
+    runtime: { projectDirectory, env: process.env, timeoutMs: 300, jevEndpoint: JEV_ENDPOINT },
+  });
+  const grandchild = Number(await readFile(join(projectDirectory, "grandchild.pid"), "utf8"));
+
+  assertUnavailable({ result, pattern: /timed out after 300 ms/ });
+  assert.equal(await exits(grandchild), true);
+});
+
+test("output larger than 1 MiB is unavailable", async (t) => {
+  const { result } = await judge({ t, respond: 'process.stdout.write("x".repeat(2 * 1024 * 1024));' });
+
+  assertUnavailable({ result, pattern: /output exceeds 1048576 bytes/ });
 });
 
 test("a command that cannot start is unavailable", async (t) => {

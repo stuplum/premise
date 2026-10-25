@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import type { CommandClassifier } from "../model.js";
 import { isRecord } from "../text.js";
 import {
@@ -8,6 +8,8 @@ import {
   type ClassifierRuntime,
   type SignoffPayload,
 } from "./types.js";
+
+const MAX_OUTPUT_BYTES = 1024 * 1024;
 
 export function classifyWithCommand({
   payload,
@@ -20,26 +22,58 @@ export function classifyWithCommand({
 }): Promise<ClassifierResult> {
   return new Promise((resolve) => {
     const [file, ...args] = classifier.command;
-    const child = spawn(file ?? "", args, { cwd: runtime.projectDirectory, env: runtime.env, stdio: ["pipe", "pipe", "ignore"] });
+    const child = spawn(file ?? "", args, {
+      cwd: runtime.projectDirectory,
+      env: runtime.env,
+      stdio: ["pipe", "pipe", "ignore"],
+      detached: process.platform !== "win32",
+    });
     let output = "";
-    const timer = setTimeout(() => {
-      child.kill("SIGKILL");
-      resolve(unavailable(`timed out after ${runtime.timeoutMs} ms`));
-    }, runtime.timeoutMs);
+    let finished = false;
+    const finish = ({ result, kill }: { result: ClassifierResult; kill: boolean }) => {
+      if (finished) {
+        return;
+      }
+      finished = true;
+      clearTimeout(timer);
+      if (kill) {
+        killProcessGroup(child);
+      }
+      resolve(result);
+    };
+    const timer = setTimeout(
+      () => finish({ result: unavailable(`timed out after ${runtime.timeoutMs} ms`), kill: true }),
+      runtime.timeoutMs,
+    );
     child.stdout.setEncoding("utf8").on("data", (chunk: string) => {
       output += chunk;
+      if (Buffer.byteLength(output) > MAX_OUTPUT_BYTES) {
+        finish({ result: unavailable(`output exceeds ${MAX_OUTPUT_BYTES} bytes`), kill: true });
+      }
     });
-    child.on("error", (error) => {
-      clearTimeout(timer);
-      resolve(unavailable(`could not start: ${error.message}`));
-    });
-    child.on("close", (code) => {
-      clearTimeout(timer);
-      resolve(code === 0 ? readOutput({ output, model: classifier.model }) : unavailable(`exited with code ${code}`));
-    });
+    child.on("error", (error) => finish({ result: unavailable(`could not start: ${error.message}`), kill: false }));
+    child.on("close", (code) =>
+      finish({
+        result: code === 0 ? readOutput({ output, model: classifier.model }) : unavailable(`exited with code ${code}`),
+        kill: false,
+      }),
+    );
     child.stdin.on("error", () => undefined);
     child.stdin.end(JSON.stringify({ ...payload, model: classifier.model }));
   });
+}
+
+function killProcessGroup(child: ChildProcess): void {
+  try {
+    if (child.pid !== undefined && process.platform !== "win32") {
+      process.kill(-child.pid, "SIGKILL");
+    } else {
+      child.kill("SIGKILL");
+    }
+  } catch {
+    child.kill("SIGKILL");
+  }
+  child.stdout?.destroy();
 }
 
 function readOutput({ output, model }: { output: string; model: string }): ClassifierResult {
