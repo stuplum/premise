@@ -89,11 +89,11 @@ test("a timeout also stops processes the command started", { skip: process.platf
   const result = await classifyWithCommand({
     payload: createPayload(),
     classifier: { ...commandClassifier, command: ["sh", "-c", "sleep 30 & echo $! > grandchild.pid; wait"] },
-    runtime: { projectDirectory, env: process.env, timeoutMs: 300, jevEndpoint: JEV_ENDPOINT },
+    runtime: { projectDirectory, env: process.env, timeoutMs: 2_000, jevEndpoint: JEV_ENDPOINT },
   });
   const grandchild = Number(await readFile(join(projectDirectory, "grandchild.pid"), "utf8"));
 
-  assertUnavailable({ result, pattern: /timed out after 300 ms/ });
+  assertUnavailable({ result, pattern: /timed out after 2000 ms/ });
   assert.equal(await exits(grandchild), true);
 });
 
