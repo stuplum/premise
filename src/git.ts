@@ -13,6 +13,18 @@ export async function requireCommit({ projectDirectory, ref }: { projectDirector
   }
 }
 
+export async function commitOf({ projectDirectory, ref }: { projectDirectory: string; ref: string }): Promise<string | undefined> {
+  try {
+    const { stdout } = await execFileAsync("git", ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`], {
+      cwd: projectDirectory,
+      encoding: "utf8",
+    });
+    return stdout.trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function readAtRef({
   projectDirectory,
   ref,

@@ -7,12 +7,14 @@ import { decisionsForFile, formatContext } from "./context.js";
 import { ConfigurationError, RefusedError } from "./errors.js";
 import { evaluateRepository } from "./evaluate.js";
 import { checkExitCode, formatEvaluations } from "./format.js";
+import { GITHUB_API_URL, githubApprovals } from "./github.js";
 import { refreshDecision } from "./refresh.js";
 import { renderDecisions } from "./render.js";
-import { formatSignoff, signoff, signoffExitCode } from "./signoff.js";
+import { formatSignoff, signoff, signoffExitCode, type Approvals } from "./signoff.js";
 import { errorMessage } from "./text.js";
 
-const usage = "Usage: premise <check | refresh <ADR-ID> | signoff --base <ref> | context <file> | render --out <dir>>";
+const usage =
+  "Usage: premise <check | refresh <ADR-ID> | signoff --base <ref> [--pull-request <n> [--repository <owner/name>]] | context <file> | render --out <dir>>";
 
 export async function run({ args, projectDirectory }: { args: string[]; projectDirectory: string }): Promise<number> {
   const [command, ...rest] = args;
@@ -48,8 +50,12 @@ async function runRefresh({ args, projectDirectory }: { args: string[]; projectD
 }
 
 async function runSignoff({ args, projectDirectory }: { args: string[]; projectDirectory: string }): Promise<number> {
-  const base = requiredOption({ args, name: "base" });
-  const outcomes = await signoff({ projectDirectory, base, runtime: defaultRuntime({ projectDirectory }) });
+  const options = parseOptions({ args, names: ["base", "pull-request", "repository"] });
+  if (!options.base) {
+    throw new ConfigurationError(usage);
+  }
+  const approvals = await pullRequestApprovals({ projectDirectory, options });
+  const outcomes = await signoff({ projectDirectory, base: options.base, runtime: defaultRuntime({ projectDirectory }), approvals });
   process.stdout.write(formatSignoff({ outcomes }));
   return signoffExitCode({ outcomes });
 }
@@ -74,18 +80,52 @@ function requireArgumentCount({ args, count }: { args: string[]; count: number }
 }
 
 function requiredOption({ args, name }: { args: string[]; name: string }): string {
-  let value: string | undefined;
-  try {
-    const parsed = parseArgs({ args, options: { [name]: { type: "string" } }, strict: true, allowPositionals: false });
-    const option = parsed.values[name];
-    value = typeof option === "string" ? option : undefined;
-  } catch {
-    throw new ConfigurationError(usage);
-  }
+  const value = parseOptions({ args, names: [name] })[name];
   if (!value) {
     throw new ConfigurationError(usage);
   }
   return value;
+}
+
+function parseOptions({ args, names }: { args: string[]; names: string[] }): Record<string, string | undefined> {
+  try {
+    const parsed = parseArgs({
+      args,
+      options: Object.fromEntries(names.map((name) => [name, { type: "string" as const }])),
+      strict: true,
+      allowPositionals: false,
+    });
+    return Object.fromEntries(names.map((name) => [name, typeof parsed.values[name] === "string" ? parsed.values[name] : undefined]));
+  } catch {
+    throw new ConfigurationError(usage);
+  }
+}
+
+async function pullRequestApprovals({
+  projectDirectory,
+  options,
+}: {
+  projectDirectory: string;
+  options: Record<string, string | undefined>;
+}): Promise<Approvals | undefined> {
+  const pullRequest = options["pull-request"];
+  if (pullRequest === undefined) {
+    return undefined;
+  }
+  if (!/^[1-9][0-9]*$/.test(pullRequest)) {
+    throw new ConfigurationError("--pull-request must be a positive whole number");
+  }
+  const repository = options.repository || process.env.GITHUB_REPOSITORY;
+  if (!repository) {
+    throw new ConfigurationError("--pull-request needs --repository or GITHUB_REPOSITORY");
+  }
+  return githubApprovals({
+    projectDirectory,
+    repository,
+    pullRequest: Number(pullRequest),
+    token: process.env.GITHUB_TOKEN ?? "",
+    apiUrl: process.env.GITHUB_API_URL || GITHUB_API_URL,
+  });
 }
 
 if (process.argv[1] !== undefined && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {

@@ -373,6 +373,25 @@ test("a base that is not a commit is a configuration error", async (t) => {
   });
 });
 
+test("signoff --pull-request needs a repository and a pull request number", async (t) => {
+  const projectDirectory = await signedThenChanged({ t, respond: respondWith(0.5) });
+
+  const noRepository = runPremise({
+    projectDirectory,
+    args: ["signoff", "--base", "HEAD", "--pull-request", "7"],
+    env: { GITHUB_REPOSITORY: "" },
+  });
+  const badNumber = runPremise({
+    projectDirectory,
+    args: ["signoff", "--base", "HEAD", "--pull-request", "seven", "--repository", "owner/repo"],
+  });
+
+  assert.equal(noRepository.status, 2);
+  assert.match(noRepository.stderr, /--pull-request needs --repository or GITHUB_REPOSITORY/);
+  assert.equal(badNumber.status, 2);
+  assert.match(badNumber.stderr, /--pull-request must be a positive whole number/);
+});
+
 test("the signoff command prints outcomes and exits 1 unless all pass", async (t) => {
   const projectDirectory = await signedThenChanged({ t, respond: respondWith(0.05) });
 
