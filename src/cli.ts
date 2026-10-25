@@ -1,10 +1,13 @@
 #!/usr/bin/env node
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
+import { defaultRuntime } from "./classifiers/types.js";
 import { ConfigurationError, RefusedError } from "./errors.js";
 import { evaluateRepository } from "./evaluate.js";
 import { checkExitCode, formatEvaluations } from "./format.js";
 import { refreshDecision } from "./refresh.js";
+import { formatSignoff, signoff, signoffExitCode } from "./signoff.js";
 import { errorMessage } from "./text.js";
 
 const usage = "Usage: premise <check | refresh <ADR-ID> | signoff --base <ref> | context <file> | render --out <dir>>";
@@ -16,6 +19,8 @@ export async function run({ args, projectDirectory }: { args: string[]; projectD
       return runCheck({ args: rest, projectDirectory });
     case "refresh":
       return runRefresh({ args: rest, projectDirectory });
+    case "signoff":
+      return runSignoff({ args: rest, projectDirectory });
     default:
       throw new ConfigurationError(usage);
   }
@@ -36,10 +41,32 @@ async function runRefresh({ args, projectDirectory }: { args: string[]; projectD
   return 0;
 }
 
+async function runSignoff({ args, projectDirectory }: { args: string[]; projectDirectory: string }): Promise<number> {
+  const base = requiredOption({ args, name: "base" });
+  const outcomes = await signoff({ projectDirectory, base, runtime: defaultRuntime({ projectDirectory }) });
+  process.stdout.write(formatSignoff({ outcomes }));
+  return signoffExitCode({ outcomes });
+}
+
 function requireArgumentCount({ args, count }: { args: string[]; count: number }): void {
   if (args.length !== count) {
     throw new ConfigurationError(usage);
   }
+}
+
+function requiredOption({ args, name }: { args: string[]; name: string }): string {
+  let value: string | undefined;
+  try {
+    const parsed = parseArgs({ args, options: { [name]: { type: "string" } }, strict: true, allowPositionals: false });
+    const option = parsed.values[name];
+    value = typeof option === "string" ? option : undefined;
+  } catch {
+    throw new ConfigurationError(usage);
+  }
+  if (!value) {
+    throw new ConfigurationError(usage);
+  }
+  return value;
 }
 
 if (process.argv[1] !== undefined && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
