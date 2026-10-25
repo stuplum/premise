@@ -1,6 +1,6 @@
 import { ConfigurationError } from "../errors.js";
 import { arrayOf, compareText, isRecord } from "../text.js";
-import type { RuleResult } from "./model.js";
+import type { RuleDefinition, RuleResult } from "./model.js";
 import { parseJson } from "./parse-json.js";
 
 export function parseDependencyCruiser({ content, uri }: { content: string; uri: string }): RuleResult[] {
@@ -33,7 +33,7 @@ export function parseDependencyCruiser({ content, uri }: { content: string; uri:
         ? [
             {
               name: rule.name,
-              definition: { name: rule.name, severity: rule.severity, from: rule.from, to: rule.to },
+              definition: ruleDefinition({ rule, name: rule.name }),
               violated: violated.has(rule.name),
               blindReason: blindReason ?? (rule.severity === "ignore" ? "rule severity is ignore, so it is not checked" : undefined),
               source: uri,
@@ -41,6 +41,14 @@ export function parseDependencyCruiser({ content, uri }: { content: string; uri:
           ]
         : [],
     );
+}
+
+export function ruleDefinition({ rule, name }: { rule: Record<string, unknown>; name: string }): RuleDefinition {
+  return Object.fromEntries(
+    Object.entries({ name, severity: rule.severity, from: rule.from, module: rule.module, to: rule.to }).filter(
+      ([, value]) => value !== undefined,
+    ),
+  ) as RuleDefinition;
 }
 
 function blindnessOf({

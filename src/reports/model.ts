@@ -11,6 +11,7 @@ export type RuleDefinition = {
   name: string;
   severity?: unknown;
   from?: unknown;
+  module?: unknown;
   to?: unknown;
 };
 

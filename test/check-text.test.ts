@@ -173,6 +173,21 @@ test("a report rule's text ignores key order", async (t) => {
   assert.notEqual(retargeted, plain);
 });
 
+test("which modules a required rule covers is part of its text, from a report or a config", async (t) => {
+  const rule = (path: string) => ({ name: "has-index", severity: "error", module: { path }, to: { path: "index" } });
+  const fromReport = (path: string) => textFor({ t, id: "has-index", files: {}, reports: reportRule(rule(path)) });
+  const fromConfig = (path: string) =>
+    textFor({
+      t,
+      id: "has-index",
+      config: { dependency_cruiser_config: ".dependency-cruiser.json" },
+      files: { ".dependency-cruiser.json": JSON.stringify({ required: [rule(path)] }) },
+    });
+
+  assert.notEqual(await fromReport("^src/a"), await fromReport("^src/b"));
+  assert.notEqual(await fromConfig("^src/a"), await fromConfig("^src/b"));
+});
+
 test("with a JSON dependency-cruiser config, a rule's text comes from the config without its comment", async (t) => {
   const text = await textFor({
     t,

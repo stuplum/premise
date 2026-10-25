@@ -18,7 +18,7 @@ export async function checkText({ id, sources }: { id: string; sources: CheckSou
   }
   const rule = sources.rules.find((candidate) => candidate.name === id);
   if (rule) {
-    return `${stableJson({ name: rule.name, severity: rule.severity, from: rule.from, to: rule.to })}\n`;
+    return `${stableJson({ name: rule.name, severity: rule.severity, from: rule.from, module: rule.module, to: rule.to })}\n`;
   }
   const files = await sources.testFiles(id);
   if (files === undefined || files.length === 0) {

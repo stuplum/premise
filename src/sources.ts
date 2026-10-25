@@ -6,6 +6,7 @@ import { ConfigurationError } from "./errors.js";
 import { loadGherkinFiles, parsePickles, type GherkinFile } from "./gherkin.js";
 import { filesAtRef, readAtRef } from "./git.js";
 import type { Config } from "./model.js";
+import { ruleDefinition } from "./reports/dependency-cruiser.js";
 import type { Reports, RuleDefinition } from "./reports/model.js";
 import { parseJson } from "./reports/parse-json.js";
 import { arrayOf, compareText, isRecord } from "./text.js";
@@ -49,9 +50,7 @@ export function configRules({ content, uri }: { content: string; uri: string }):
   }
   return [...arrayOf(document.forbidden), ...arrayOf(document.required)]
     .filter(isRecord)
-    .flatMap((rule) =>
-      typeof rule.name === "string" ? [{ name: rule.name, severity: rule.severity, from: rule.from, to: rule.to }] : [],
-    );
+    .flatMap((rule) => (typeof rule.name === "string" ? [ruleDefinition({ rule, name: rule.name })] : []));
 }
 
 export async function testFilePaths({
