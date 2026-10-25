@@ -84,6 +84,24 @@ test("Gherkin text is rebuilt from the commit that signed it", async (t) => {
   assert.deepEqual(recovery, { status: "recovered", commit: signed.commit, text: signed.text });
 });
 
+test("Gherkin in dot directories and node_modules is ignored at a commit as it is in the working tree", async (t) => {
+  const projectDirectory = await project({
+    t,
+    config: { gherkin: "**/*.feature" },
+    files: {
+      "features/payments.feature": feature("10"),
+      ".cache/payments.feature": feature("99"),
+      "node_modules/pkg/payments.feature": feature("98"),
+    },
+  });
+  const signed = await sign({ projectDirectory, check: "PAY-001", reports: noReports });
+  await writeFiles({ projectDirectory, files: { "features/payments.feature": feature("11") } });
+
+  const recovery = await recover({ projectDirectory, check: "PAY-001", fingerprint: signed.fingerprint, reports: noReports });
+
+  assert.deepEqual(recovery, { status: "recovered", commit: signed.commit, text: signed.text });
+});
+
 test("signed text is rebuilt for a project in a subdirectory of the repository", async (t) => {
   const repository = await createProject({ t, files: { "README.md": "root\n" } });
   commitAll({ projectDirectory: repository, message: "root" });

@@ -3,11 +3,14 @@ import { join } from "node:path";
 import { generateMessages } from "@cucumber/gherkin";
 import { IdGenerator, SourceMediaType, type Pickle, type PickleStepArgument } from "@cucumber/messages";
 import { glob } from "glob";
+import { minimatch } from "minimatch";
 import { ConfigurationError } from "./errors.js";
 import type { Config } from "./model.js";
 import { compareText } from "./text.js";
 
 export type GherkinFile = { uri: string; pickles: Pickle[] };
+
+const IGNORED_GHERKIN = "**/node_modules/**";
 
 export async function loadGherkinFiles({
   projectDirectory,
@@ -19,12 +22,17 @@ export async function loadGherkinFiles({
   if (config.gherkin === undefined) {
     return [];
   }
-  const uris = await glob(config.gherkin, { cwd: projectDirectory, nodir: true, posix: true, ignore: ["node_modules/**"] });
+  const uris = await glob(config.gherkin, { cwd: projectDirectory, nodir: true, posix: true, ignore: [IGNORED_GHERKIN] });
+  const pattern = config.gherkin;
   const files: GherkinFile[] = [];
-  for (const uri of uris.sort(compareText)) {
+  for (const uri of uris.filter((candidate) => selectsGherkinFile({ uri: candidate, pattern })).sort(compareText)) {
     files.push({ uri, pickles: parsePickles({ content: await readFile(join(projectDirectory, uri), "utf8"), uri }) });
   }
   return files;
+}
+
+export function selectsGherkinFile({ uri, pattern }: { uri: string; pattern: string }): boolean {
+  return minimatch(uri, pattern) && !minimatch(uri, IGNORED_GHERKIN);
 }
 
 export function parsePickles({ content, uri }: { content: string; uri: string }): Pickle[] {

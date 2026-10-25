@@ -1,9 +1,8 @@
 import { readFile, realpath, stat } from "node:fs/promises";
 import { isAbsolute, join, relative, sep } from "node:path";
-import { minimatch } from "minimatch";
 import type { CheckSources, TestFile } from "./check-text.js";
 import { ConfigurationError } from "./errors.js";
-import { loadGherkinFiles, parsePickles, type GherkinFile } from "./gherkin.js";
+import { loadGherkinFiles, parsePickles, selectsGherkinFile, type GherkinFile } from "./gherkin.js";
 import { filesAtRef, readAtRef } from "./git.js";
 import type { Config } from "./model.js";
 import { ruleDefinition } from "./reports/dependency-cruiser.js";
@@ -115,7 +114,7 @@ export async function sourcesAtCommit({
     pattern === undefined
       ? []
       : (await filesAtRef({ projectDirectory, ref: commit }))
-          .filter((uri) => minimatch(uri, pattern, { dot: true }))
+          .filter((uri) => selectsGherkinFile({ uri, pattern }))
           .sort(compareText);
   const gherkin: GherkinFile[] = [];
   for (const uri of gherkinUris) {
